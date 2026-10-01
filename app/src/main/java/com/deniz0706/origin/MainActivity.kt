@@ -59,7 +59,7 @@ private fun OriginApp() {
     } else {
       0f
     },
-    animationSpec = tween(durationMillis = 2000)
+    animationSpec = tween(durationMillis = 2200)
   )
   val originTextProgress = animateFloatAsState(
     targetValue = if (originTextStarted.value){
@@ -67,14 +67,14 @@ private fun OriginApp() {
     } else {
       0f
     },
-    animationSpec = tween(durationMillis = 1000)
+    animationSpec = tween(durationMillis = 1600)
   )
        
     LaunchedEffect(Unit) {
       originTextStarted.value = true
-      delay(800)
+      delay(1400)
       originCircleStarted.value = true
-      delay (2000)
+      delay(2200)
       animationStarted.value =  true
     }
     
@@ -95,14 +95,14 @@ private fun OriginApp() {
                     y = size.height / 2
                   )
                   val lifeCenter = Offset(
-                    x = size.width / 2 + 250f,
-                    y = size.height / 2 - 200f
+                    x = size.width / 2 + 380f,
+                    y = size.height / 2 - 280f
                   )
                   val dx = lifeCenter.x - originCenter.x
                   val dy = lifeCenter.y - originCenter.y
                   val distance = kotlin.math.sqrt(dx*dx + dy*dy)
-                  val originRatio = 100f / distance
-                  val lifeRatio = 70f / distance
+                  val originRatio = 150f / distance
+                  val lifeRatio = 105f / distance
                   val lineStart = Offset(
                     x = originCenter.x + (dx*originRatio),
                     y = originCenter.y + (dy*originRatio)
@@ -121,26 +121,26 @@ private fun OriginApp() {
                     color = Color.White,
                     start = lineStart,
                     end = animatedEnd,
-                    strokeWidth = 2f
+                    strokeWidth = 3f
                   )
                   drawCircle(
                     color = Color.White,
-                    radius = 70f,
+                    radius = 105f,
                     center = lifeCenter,
-                    style = Stroke(width = 2f)
+                    style = Stroke(width = 3f)
                   )
                   drawArc(
                     startAngle = 0f,
                     sweepAngle = originCircleProgress.value * 360f,
-                    style = Stroke(width = 2f),
+                    style = Stroke(width = 3f),
                     size = Size(
-                      width = 200f,
-                      height = 200f
+                      width = 300f,
+                      height = 300f
                     ),
                     color = Color.White,
                     topLeft = Offset(
-                      x = originCenter.x - 100f,
-                      y = originCenter.y - 100f
+                      x = originCenter.x - 150f,
+                      y = originCenter.y - 150f
                     ),
                     useCenter = false
                   )
@@ -150,7 +150,7 @@ private fun OriginApp() {
                     color = Color.White.copy(
                       alpha = originTextProgress.value
                     ),
-                    fontSize = 20.sp,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                    )
@@ -159,12 +159,12 @@ private fun OriginApp() {
                     text = "YAŞAM",
                     style = TextStyle(
                       color = Color.White,
-                      fontSize = 15.sp,
+                      fontSize = 20.sp,
                       fontWeight = FontWeight.Bold,
                       letterSpacing = 1.sp
                     )
                   )
-                  val originTextOffsetY = 25f * (1f - originTextProgress.value)
+                  val originTextOffsetY = 45f * (1f - originTextProgress.value)
                   
                   drawText(
                     textLayoutResult = lifeText,
