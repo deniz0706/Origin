@@ -11,19 +11,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Kodu al
+      - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Java 17 kur
+      - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Gradle 8.11.1 kur
+      - name: Set up Gradle 9.8.0
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "8.13"
+          gradle-version: "9.8.0"
 
-      - name: Debug APK derle
-        run: gradle assembleDebug
+      - name: Run unit tests and build debug APK
+        run: gradle testDebugUnitTest assembleDebug
+
+      - name: Read application version
+        id: version
+        shell: bash
+        run: echo "version_name=$(gradle --quiet printVersionName)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Origin-v${{ steps.version.outputs.version_name }}
+          path: app/build/outputs/apk/debug/Origin-v${{ steps.version.outputs.version_name }}-debug.apk
+          if-no-files-found: error
