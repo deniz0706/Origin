@@ -12,6 +12,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,7 +33,18 @@ private fun OriginApp() {
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                Text(text = "Origin")
+                Canvas (
+                    modifier = Modifier.fillMaxSize()
+                    ){
+                    drawCircle(
+                        color = Color.white,
+                        radius = 20f,
+                        center = Offset(
+                            x = size.width / 2,
+                            y = size.height / 2
+                            )
+                        )
+                }
             }
         }
     }
