@@ -2,7 +2,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="Origin"
+        android:label="@string/app_name"
         android:theme="@style/Theme.Origin">
 
         <activity
