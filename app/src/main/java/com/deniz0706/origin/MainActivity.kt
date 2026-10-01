@@ -15,6 +15,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,6 +32,9 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun OriginApp() {
+
+  val textMeasurer = rememberTextMeasurer() 
+  
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -38,12 +46,29 @@ private fun OriginApp() {
                     ){
                     drawCircle(
                         color = Color.White,
-                        radius = 20f,
+                        radius = 100f,
                         center = Offset(
                             x = size.width / 2,
                             y = size.height / 2
-                            )
+                            ),
+                        style = Stroke(width = 2f)
                         )
+                    val originText = textMeasurer.measure(
+                      text = "ORIGIN",
+                      style = TextStyle(
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                      )
+                    )
+                    drawText(
+                      textLayoutResult = originText,
+                      topLeft = Offset(
+                        x = size.width / 2 - originText.size.width / 2,
+                        y = size.height / 2 - originText.size.height / 2
+                      )
+                    )
                 }
             }
         }
