@@ -21,6 +21,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.drawText
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,9 +39,24 @@ class MainActivity : ComponentActivity() {
 private fun OriginApp() {
 
   val textMeasurer = rememberTextMeasurer() 
-  
+  var animationStarted = remember { mutableStateOf(false) }
+  val lineProgress = animateFloatAsState(
+    targetValue = if (animationStarted.value){
+      1f
+    } else {
+      0f
+    }
+  )
+       
+    LaunchedEffect(Unit) {
+      animationStarted.value =  true
+    }
+    
     MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
+        Surface(
+          modifier = Modifier.fillMaxSize(),
+          color = Color.Black
+        ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize(),
@@ -66,10 +85,16 @@ private fun OriginApp() {
                     x = lifeCenter.x - (dx*lifeRatio),
                     y = lifeCenter.y - (dy*lifeRatio)
                   )
+                  val animatedEndX = lineStart.x + ((lineEnd.x - lineStart.x) * lineProgress.value)
+                  val animatedEndY = lineStart.y + ((lineEnd.y - lineStart.y) * lineProgress.value)
+                  val animatedEnd = Offset(
+                    x = animatedEndX,
+                    y = animatedEndY
+                  )
                   drawLine(
                     color = Color.White,
                     start = lineStart,
-                    end = lineEnd,
+                    end = animatedEnd,
                     strokeWidth = 2f
                   )
                   drawCircle(
