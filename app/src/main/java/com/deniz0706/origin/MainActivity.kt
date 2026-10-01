@@ -24,7 +24,10 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Size
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,17 +41,29 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun OriginApp() {
 
-  val textMeasurer = rememberTextMeasurer() 
   var animationStarted = remember { mutableStateOf(false) }
+  var originCircleStarted = remember { mutableStateOf(false) }
+  val textMeasurer = rememberTextMeasurer() 
   val lineProgress = animateFloatAsState(
     targetValue = if (animationStarted.value){
       1f
     } else {
       0f
-    }
+    },
+    animationSpec = tween(durationMillis = 4000)
+  )
+  val originCircleProgress = animateFloatAsState(
+    targetValue = if (originCircleStarted.value){
+      1f
+    } else {
+      0f
+    },
+    animationSpec = tween(durationMillis = 2000)
   )
        
     LaunchedEffect(Unit) {
+      originCircleStarted.value = true
+      delay (2000)
       animationStarted.value =  true
     }
     
@@ -103,11 +118,20 @@ private fun OriginApp() {
                     center = lifeCenter,
                     style = Stroke(width = 2f)
                   )
-                  drawCircle(
+                  drawArc(
+                    startAngle = 0f,
+                    sweepAngle = originCircleProgress.value * 360f,
+                    style = Stroke(width = 2f),
+                    size = Size(
+                      width = 200f,
+                      height = 200f
+                    ),
                     color = Color.White,
-                    radius = 100f,
-                    center = originCenter,
-                    style = Stroke(width = 2f)
+                    topLeft = Offset(
+                      x = originCenter.x - 100f,
+                      y = originCenter.y - 100f
+                    ),
+                    useCenter = false
                   )
                   val originText = textMeasurer.measure(
                     text = "ORIGIN",
