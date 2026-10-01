@@ -45,29 +45,75 @@ private fun OriginApp() {
                 Canvas (
                     modifier = Modifier.fillMaxSize()
                     ){
-                    drawCircle(
-                        color = Color.White,
-                        radius = 100f,
-                        center = Offset(
-                            x = size.width / 2,
-                            y = size.height / 2
-                            ),
-                        style = Stroke(width = 2f)
-                        )
-                    val originText = textMeasurer.measure(
-                      text = "ORIGIN",
-                      style = TextStyle(
-                        color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp
-                      )
+                  val originCenter = Offset(
+                    x = size.width / 2,
+                    y = size.height / 2
+                  )
+                  val lifeCenter = Offset(
+                    x = size.width / 2 + 250f,
+                    y = size.height / 2 - 200f
+                  )
+                  val dx = lifeCenter.x - originCenter.x
+                  val dy = lifeCenter.y - originCenter.y
+                  val distance = kotlin.math.sqrt(dx*dx + dy*dy)
+                  val originRatio = 100f / distance
+                  val lifeRatio = 70f / distance
+                  val lineStart = Offset(
+                    x = originCenter.x + (dx*originRatio),
+                    y = originCenter.y + (dy*originRatio)
+                  )
+                  val lineEnd = Offset(
+                    x = lifeCenter.x - (dx*lifeRatio),
+                    y = lifeCenter.y - (dy*lifeRatio)
+                  )
+                  drawLine(
+                    color = Color.White,
+                    start = lineStart,
+                    end = lineEnd,
+                    strokeWidth = 2f
+                  )
+                  drawCircle(
+                    color = Color.White,
+                    radius = 70f,
+                    center = lifeCenter,
+                    style = Stroke(width = 2f)
+                  )
+                  drawCircle(
+                    color = Color.White,
+                    radius = 100f,
+                    center = originCenter,
+                    style = Stroke(width = 2f)
+                  )
+                  val originText = textMeasurer.measure(
+                    text = "ORIGIN",
+                    style = TextStyle(
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                   )
+                )
+                  val lifeText = textMeasurer.measure(
+                    text = "YAŞAM",
+                    style = TextStyle(
+                      color = Color.White,
+                      fontSize = 15.sp,
+                      fontWeight = FontWeight.Bold,
+                      letterSpacing = 1.sp
                     )
-                    drawText(
-                      textLayoutResult = originText,
-                      topLeft = Offset(
-                        x = size.width / 2 - originText.size.width / 2,
-                        y = size.height / 2 - originText.size.height / 2
+                  )
+                  drawText(
+                    textLayoutResult = lifeText,
+                    topLeft = Offset(
+                      x = lifeCenter.x - lifeText.size.width / 2,
+                      y = size.height.y - lifeText.size.height / 2
+                    )
+                  )
+                  drawText(
+                    textLayoutResult = originText,
+                    topLeft = Offset(
+                      x = size.width / 2 - originText.size.width / 2,
+                      y = size.height / 2 - originText.size.height / 2
                       )
                     )
                 }
