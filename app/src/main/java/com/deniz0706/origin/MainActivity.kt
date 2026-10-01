@@ -61,8 +61,8 @@ private fun OriginApp() {
     },
     animationSpec = tween(durationMillis = 2000)
   )
-  val originTextProgress = animationFloatAsState(
-    targetValue = if (originTextStarted){
+  val originTextProgress = animateFloatAsState(
+    targetValue = if (originTextStarted.value){
       1f
     } else {
       0f
@@ -170,14 +170,14 @@ private fun OriginApp() {
                     textLayoutResult = lifeText,
                     topLeft = Offset(
                       x = lifeCenter.x - lifeText.size.width / 2,
-                      y = lifeCenter.y - lifeText.size.height / 2 + originTextOffsetY
+                      y = lifeCenter.y - lifeText.size.height / 2
                     )
                   )
                   drawText(
                     textLayoutResult = originText,
                     topLeft = Offset(
                       x = size.width / 2 - originText.size.width / 2,
-                      y = size.height / 2 - originText.size.height / 2
+                      y = size.height / 2 - originText.size.height / 2 + originTextOffsetY
                       )
                     )
                 }
