@@ -106,7 +106,7 @@ private fun OriginApp() {
                     textLayoutResult = lifeText,
                     topLeft = Offset(
                       x = lifeCenter.x - lifeText.size.width / 2,
-                      y = size.height.y - lifeText.size.height / 2
+                      y = lifeCenter.y - lifeText.size.height / 2
                     )
                   )
                   drawText(
