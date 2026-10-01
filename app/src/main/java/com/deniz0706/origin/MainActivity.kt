@@ -37,7 +37,7 @@ private fun OriginApp() {
                     modifier = Modifier.fillMaxSize()
                     ){
                     drawCircle(
-                        color = Color.white,
+                        color = Color.White,
                         radius = 20f,
                         center = Offset(
                             x = size.width / 2,
