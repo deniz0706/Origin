@@ -43,6 +43,7 @@ private fun OriginApp() {
 
   var animationStarted = remember { mutableStateOf(false) }
   var originCircleStarted = remember { mutableStateOf(false) }
+  var originTextStarted = remember { mutableStateOf(false) }
   val textMeasurer = rememberTextMeasurer() 
   val lineProgress = animateFloatAsState(
     targetValue = if (animationStarted.value){
@@ -50,7 +51,7 @@ private fun OriginApp() {
     } else {
       0f
     },
-    animationSpec = tween(durationMillis = 4000)
+    animationSpec = tween(durationMillis = 3500)
   )
   val originCircleProgress = animateFloatAsState(
     targetValue = if (originCircleStarted.value){
@@ -60,8 +61,18 @@ private fun OriginApp() {
     },
     animationSpec = tween(durationMillis = 2000)
   )
+  val originTextProgress = animationFloatAsState(
+    targetValue = if (originTextStarted){
+      1f
+    } else {
+      0f
+    },
+    animationSpec = tween(durationMillis = 1000)
+  )
        
     LaunchedEffect(Unit) {
+      originTextStarted.value = true
+      delay(800)
       originCircleStarted.value = true
       delay (2000)
       animationStarted.value =  true
@@ -136,7 +147,9 @@ private fun OriginApp() {
                   val originText = textMeasurer.measure(
                     text = "ORIGIN",
                     style = TextStyle(
-                    color = Color.White,
+                    color = Color.White.copy(
+                      alpha = originTextProgress.value
+                    ),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
@@ -151,11 +164,13 @@ private fun OriginApp() {
                       letterSpacing = 1.sp
                     )
                   )
+                  val originTextOffsetY = 25f * (1f - originTextProgress.value)
+                  
                   drawText(
                     textLayoutResult = lifeText,
                     topLeft = Offset(
                       x = lifeCenter.x - lifeText.size.width / 2,
-                      y = lifeCenter.y - lifeText.size.height / 2
+                      y = lifeCenter.y - lifeText.size.height / 2 + originTextOffsetY
                     )
                   )
                   drawText(
