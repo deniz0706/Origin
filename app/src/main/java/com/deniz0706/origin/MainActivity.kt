@@ -95,13 +95,13 @@ private fun OriginApp() {
                     y = size.height / 2
                   )
                   val lifeCenter = Offset(
-                    x = size.width / 2 + 380f,
-                    y = size.height / 2 - 280f
+                    x = size.width / 2 + 450f,
+                    y = size.height / 2 - 330f
                   )
                   val dx = lifeCenter.x - originCenter.x
                   val dy = lifeCenter.y - originCenter.y
                   val distance = kotlin.math.sqrt(dx*dx + dy*dy)
-                  val originRatio = 150f / distance
+                  val originRatio = 180f / distance
                   val lifeRatio = 105f / distance
                   val lineStart = Offset(
                     x = originCenter.x + (dx*originRatio),
@@ -134,13 +134,13 @@ private fun OriginApp() {
                     sweepAngle = originCircleProgress.value * 360f,
                     style = Stroke(width = 3f),
                     size = Size(
-                      width = 300f,
-                      height = 300f
+                      width = 360f,
+                      height = 360f
                     ),
                     color = Color.White,
                     topLeft = Offset(
-                      x = originCenter.x - 150f,
-                      y = originCenter.y - 150f
+                      x = originCenter.x - 180f,
+                      y = originCenter.y - 180f
                     ),
                     useCenter = false
                   )
@@ -150,7 +150,7 @@ private fun OriginApp() {
                     color = Color.White.copy(
                       alpha = originTextProgress.value
                     ),
-                    fontSize = 28.sp,
+                    fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 2.sp
                    )
