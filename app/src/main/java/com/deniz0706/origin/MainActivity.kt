@@ -41,17 +41,19 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun OriginApp() {
 
-  var animationStarted = remember { mutableStateOf(false) }
+  var lifeLineStarted = remember { mutableStateOf(false) }
   var originCircleStarted = remember { mutableStateOf(false) }
   var originTextStarted = remember { mutableStateOf(false) }
+  val lifeTextStarted = remember { mutableStateOf(false) }
+  var lifeCircleStarted = remember { mutableStateOf(false) }
   val textMeasurer = rememberTextMeasurer() 
-  val lineProgress = animateFloatAsState(
-    targetValue = if (animationStarted.value){
+  val lifeLineProgress = animateFloatAsState(
+    targetValue = if (lifeLineStarted.value){
       1f
     } else {
       0f
     },
-    animationSpec = tween(durationMillis = 3500)
+    animationSpec = tween(durationMillis = 2800)
   )
   val originCircleProgress = animateFloatAsState(
     targetValue = if (originCircleStarted.value){
@@ -59,7 +61,7 @@ private fun OriginApp() {
     } else {
       0f
     },
-    animationSpec = tween(durationMillis = 2200)
+    animationSpec = tween(durationMillis = 1900)
   )
   val originTextProgress = animateFloatAsState(
     targetValue = if (originTextStarted.value){
@@ -69,13 +71,33 @@ private fun OriginApp() {
     },
     animationSpec = tween(durationMillis = 1600)
   )
+  val lifeTextProgress = animateFloatAsState(
+    targetValue = if (lifeTextStarted.value){
+      1f
+    } else {
+      0f
+    },
+    animationSpec = tween(durationMillis = 1000)
+  )
+  val lifeCircleProgress = animateFloatAsState(
+    targetValue = if (lifeCircleStarted.value){
+      1f
+    } else {
+      0f
+    },
+    animationSpec = tween(durationMillis = 1000)
+  )
        
     LaunchedEffect(Unit) {
       originTextStarted.value = true
-      delay(1400)
+      delay(1200)
       originCircleStarted.value = true
-      delay(2200)
-      animationStarted.value =  true
+      delay(1900)
+      lifeLineStarted.value =  true
+      delay(2800)
+      lifeCircleStarted.value =  true
+      delay(1000)
+      lifeTextStarted.value = true
     }
     
     MaterialTheme {
@@ -111,8 +133,14 @@ private fun OriginApp() {
                     x = lifeCenter.x - (dx*lifeRatio),
                     y = lifeCenter.y - (dy*lifeRatio)
                   )
-                  val animatedEndX = lineStart.x + ((lineEnd.x - lineStart.x) * lineProgress.value)
-                  val animatedEndY = lineStart.y + ((lineEnd.y - lineStart.y) * lineProgress.value)
+                  val lifeStartAngle = Math.toDegrees(
+                    kotlin.math.atan2(
+                      (lineEnd.y - lifeCenter.y).toDouble(),
+                      (lineEnd.x - lifeCenter.x).toDouble()
+                    )
+                  ).toFloat()
+                  val animatedEndX = lineStart.x + ((lineEnd.x - lineStart.x) * lifeLineProgress.value)
+                  val animatedEndY = lineStart.y + ((lineEnd.y - lineStart.y) * lifeLineProgress.value)
                   val animatedEnd = Offset(
                     x = animatedEndX,
                     y = animatedEndY
@@ -123,11 +151,35 @@ private fun OriginApp() {
                     end = animatedEnd,
                     strokeWidth = 3f
                   )
-                  drawCircle(
+                  drawArc(
+                    startAngle = lifeStartAngle,
+                    sweepAngle = lifeCircleProgress.value * 180f,
+                    style = Stroke(width = 3f),
+                    size = Size(
+                      width = 210f,
+                      height = 210f
+                    ),
                     color = Color.White,
-                    radius = 105f,
-                    center = lifeCenter,
-                    style = Stroke(width = 3f)
+                    topLeft = Offset(
+                      x = lifeCenter.x - 105f,
+                      y = lifeCenter.y - 105f
+                    ),
+                    useCenter = false
+                  )
+                  drawArc(
+                    startAngle = lifeStartAngle,
+                    sweepAngle = lifeCircleProgress.value * -180f,
+                    style = Stroke(width = 3f),
+                    size = Size(
+                      width = 210f,
+                      height = 210f
+                    ),
+                    color = Color.White,
+                    topLeft = Offset(
+                      x = lifeCenter.x - 105f,
+                      y = lifeCenter.y - 105f
+                    ),
+                    useCenter = false
                   )
                   drawArc(
                     startAngle = 0f,
@@ -158,7 +210,9 @@ private fun OriginApp() {
                   val lifeText = textMeasurer.measure(
                     text = "YAŞAM",
                     style = TextStyle(
-                      color = Color.White,
+                      color = Color.White.copy(
+                        alpha = lifeTextProgress.value
+                      ),
                       fontSize = 20.sp,
                       fontWeight = FontWeight.Bold,
                       letterSpacing = 1.sp
