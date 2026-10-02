@@ -65,6 +65,45 @@ private fun DrawScope.drawConnection(
 
     return lineEnd
 }
+
+private fun DrawScope.drawNodeCircle(
+    node: OriginNode,
+    startAngle: Float,
+    progress: Float
+) {
+    drawArc(
+      startAngle = startAngle,
+      sweepAngle = progress * 180f,
+      style = Stroke(width = 3f),
+      size = Size(
+        width = node.radius * 2,
+        height = node.radius * 2
+      ),
+      color = Color.White,
+      topLeft = Offset(
+        x = node.center.x - node.radius,
+        y = node.center.y - node.radius
+      ),
+      useCenter = false
+    )
+
+    drawArc(
+      startAngle = startAngle,
+      sweepAngle = progress * -180f,
+      style = Stroke(width = 3f),
+      size = Size(
+        width = node.radius * 2,
+        height = node.radius * 2
+      ),
+      color = Color.White,
+      topLeft = Offset(
+        x = node.center.x - node.radius,
+        y = node.center.y - node.radius
+      ),
+      useCenter = false
+    )
+}
+
 @Composable
 fun OriginApp() {
 
@@ -166,36 +205,13 @@ fun OriginApp() {
                       (lineEnd.x - life.center.x).toDouble()
                     )
                   ).toFloat()
-                  drawArc(
+
+                  drawNodeCircle(
+                    node = life,
                     startAngle = lifeStartAngle,
-                    sweepAngle = lifeCircleProgress.value * 180f,
-                    style = Stroke(width = 3f),
-                    size = Size(
-                      width = life.radius * 2,
-                      height = life.radius * 2
-                    ),
-                    color = Color.White,
-                    topLeft = Offset(
-                      x = life.center.x - life.radius,
-                      y = life.center.y - life.radius
-                    ),
-                    useCenter = false
+                    progress = lifeCircleProgress.value
                   )
-                  drawArc(
-                    startAngle = lifeStartAngle,
-                    sweepAngle = lifeCircleProgress.value * -180f,
-                    style = Stroke(width = 3f),
-                    size = Size(
-                      width = life.radius * 2,
-                      height = life.radius * 2
-                    ),
-                    color = Color.White,
-                    topLeft = Offset(
-                      x = life.center.x - life.radius,
-                      y = life.center.y - life.radius
-                    ),
-                    useCenter = false
-                  )
+
                   drawArc(
                     startAngle = 0f,
                     sweepAngle = originCircleProgress.value * 360f,
