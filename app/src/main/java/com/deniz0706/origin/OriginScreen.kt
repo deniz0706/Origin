@@ -166,18 +166,6 @@ fun OriginApp() {
                       (lineEnd.x - life.center.x).toDouble()
                     )
                   ).toFloat()
-                  val animatedEndX = lineStart.x + ((lineEnd.x - lineStart.x) * lifeLineProgress.value)
-                  val animatedEndY = lineStart.y + ((lineEnd.y - lineStart.y) * lifeLineProgress.value)
-                  val animatedEnd = Offset(
-                    x = animatedEndX,
-                    y = animatedEndY
-                  )
-                  drawLine(
-                    color = Color.White,
-                    start = lineStart,
-                    end = animatedEnd,
-                    strokeWidth = 3f
-                  )
                   drawArc(
                     startAngle = lifeStartAngle,
                     sweepAngle = lifeCircleProgress.value * 180f,
