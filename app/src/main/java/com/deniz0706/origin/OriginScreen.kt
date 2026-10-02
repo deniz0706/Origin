@@ -24,7 +24,47 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import kotlinx.coroutines.delay
+import androidx.compose.ui.graphics.drawscope.DrawScope
 
+private fun DrawScope.drawConnection(
+    from: OriginNode,
+    to: OriginNode,
+    progress: Float
+): Offset {
+    val dx = to.center.x - from.center.x
+    val dy = to.center.y - from.center.y
+    val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+
+    val fromRatio = from.radius / distance
+    val toRatio = to.radius / distance
+
+    val lineStart = Offset(
+      x = from.center.x + (dx * fromRatio),
+      y = from.center.y + (dy * fromRatio)
+    )
+
+    val lineEnd = Offset(
+      x = to.center.x - (dx * toRatio),
+      y = to.center.y - (dy * toRatio)
+    )
+
+    val animatedEndX = lineStart.x + ((lineEnd.x - lineStart.x) * progress)
+    val animatedEndY = lineStart.y + ((lineEnd.y - lineStart.y) * progress)
+
+    val animatedEnd = Offset(
+      x = animatedEndX,
+      y = animatedEndY
+    )
+
+    drawLine(
+      color = Color.White,
+      start = lineStart,
+      end = animatedEnd,
+      strokeWidth = 3f
+    )
+
+    return lineEnd
+}
 @Composable
 fun OriginApp() {
 
@@ -99,31 +139,31 @@ fun OriginApp() {
                 Canvas (
                     modifier = Modifier.fillMaxSize()
                     ){
-                  val originCenter = Offset(
-                    x = size.width / 2,
-                    y = size.height / 2
+                  val origin = OriginNode(
+                    name = "ORIGIN",
+                    center = Offset(
+                      x = size.width / 2,
+                      y = size.height / 2
+                    ),
+                    radius = 180f
                   )
-                  val lifeCenter = Offset(
-                    x = size.width / 2 + 450f,
-                    y = size.height / 2 - 330f
+                  val life = OriginNode(
+                    name = "YAŞAM",
+                    center = Offset(
+                      x = size.width / 2 + 450f,
+                      y = size.height / 2 - 330f
+                    ),
+                    radius = 105f
                   )
-                  val dx = lifeCenter.x - originCenter.x
-                  val dy = lifeCenter.y - originCenter.y
-                  val distance = kotlin.math.sqrt(dx*dx + dy*dy)
-                  val originRatio = 180f / distance
-                  val lifeRatio = 105f / distance
-                  val lineStart = Offset(
-                    x = originCenter.x + (dx*originRatio),
-                    y = originCenter.y + (dy*originRatio)
-                  )
-                  val lineEnd = Offset(
-                    x = lifeCenter.x - (dx*lifeRatio),
-                    y = lifeCenter.y - (dy*lifeRatio)
+                  val lineEnd = drawConnection(
+                    from = origin,
+                    to = life,
+                    progress = lifeLineProgress.value
                   )
                   val lifeStartAngle = Math.toDegrees(
                     kotlin.math.atan2(
-                      (lineEnd.y - lifeCenter.y).toDouble(),
-                      (lineEnd.x - lifeCenter.x).toDouble()
+                      (lineEnd.y - life.center.y).toDouble(),
+                      (lineEnd.x - life.center.x).toDouble()
                     )
                   ).toFloat()
                   val animatedEndX = lineStart.x + ((lineEnd.x - lineStart.x) * lifeLineProgress.value)
@@ -143,13 +183,13 @@ fun OriginApp() {
                     sweepAngle = lifeCircleProgress.value * 180f,
                     style = Stroke(width = 3f),
                     size = Size(
-                      width = 210f,
-                      height = 210f
+                      width = life.radius * 2,
+                      height = life.radius * 2
                     ),
                     color = Color.White,
                     topLeft = Offset(
-                      x = lifeCenter.x - 105f,
-                      y = lifeCenter.y - 105f
+                      x = life.center.x - life.radius,
+                      y = life.center.y - life.radius
                     ),
                     useCenter = false
                   )
@@ -158,13 +198,13 @@ fun OriginApp() {
                     sweepAngle = lifeCircleProgress.value * -180f,
                     style = Stroke(width = 3f),
                     size = Size(
-                      width = 210f,
-                      height = 210f
+                      width = life.radius * 2,
+                      height = life.radius * 2
                     ),
                     color = Color.White,
                     topLeft = Offset(
-                      x = lifeCenter.x - 105f,
-                      y = lifeCenter.y - 105f
+                      x = life.center.x - life.radius,
+                      y = life.center.y - life.radius
                     ),
                     useCenter = false
                   )
@@ -173,18 +213,18 @@ fun OriginApp() {
                     sweepAngle = originCircleProgress.value * 360f,
                     style = Stroke(width = 3f),
                     size = Size(
-                      width = 360f,
-                      height = 360f
+                      width = origin.radius * 2,
+                      height = origin.radius * 2
                     ),
                     color = Color.White,
                     topLeft = Offset(
-                      x = originCenter.x - 180f,
-                      y = originCenter.y - 180f
+                      x = origin.center.x - origin.radius,
+                      y = origin.center.y - origin.radius
                     ),
                     useCenter = false
                   )
                   val originText = textMeasurer.measure(
-                    text = "ORIGIN",
+                    text = origin.name,
                     style = TextStyle(
                     color = Color.White.copy(
                       alpha = originTextProgress.value
@@ -195,7 +235,7 @@ fun OriginApp() {
                    )
                 )
                   val lifeText = textMeasurer.measure(
-                    text = "YAŞAM",
+                    text = life.name,
                     style = TextStyle(
                       color = Color.White.copy(
                         alpha = lifeTextProgress.value
@@ -210,15 +250,15 @@ fun OriginApp() {
                   drawText(
                     textLayoutResult = lifeText,
                     topLeft = Offset(
-                      x = lifeCenter.x - lifeText.size.width / 2,
-                      y = lifeCenter.y - lifeText.size.height / 2
+                      x = life.center.x - lifeText.size.width / 2,
+                      y = life.center.y - lifeText.size.height / 2
                     )
                   )
                   drawText(
                     textLayoutResult = originText,
                     topLeft = Offset(
-                      x = size.width / 2 - originText.size.width / 2,
-                      y = size.height / 2 - originText.size.height / 2 + originTextOffsetY
+                      x = origin.center.x - originText.size.width / 2,
+                      y = origin.center.y - originText.size.height / 2 + originTextOffsetY
                       )
                     )
                 }
