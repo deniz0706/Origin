@@ -1,6 +1,7 @@
 package com.deniz0706.origin
 
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,22 +16,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import kotlinx.coroutines.delay
-import androidx.compose.ui.graphics.drawscope.DrawScope
 
 private fun DrawScope.drawConnection(
     from: OriginNode,
     to: OriginNode,
     progress: Float
-): Offset {
+): Float {
     val dx = to.center.x - from.center.x
     val dy = to.center.y - from.center.y
     val distance = kotlin.math.sqrt(dx * dx + dy * dy)
@@ -48,12 +49,9 @@ private fun DrawScope.drawConnection(
       y = to.center.y - (dy * toRatio)
     )
 
-    val animatedEndX = lineStart.x + ((lineEnd.x - lineStart.x) * progress)
-    val animatedEndY = lineStart.y + ((lineEnd.y - lineStart.y) * progress)
-
     val animatedEnd = Offset(
-      x = animatedEndX,
-      y = animatedEndY
+      x = lineStart.x + ((lineEnd.x - lineStart.x) * progress),
+      y = lineStart.y + ((lineEnd.y - lineStart.y) * progress)
     )
 
     drawLine(
@@ -63,7 +61,12 @@ private fun DrawScope.drawConnection(
       strokeWidth = 3f
     )
 
-    return lineEnd
+    return Math.toDegrees(
+      kotlin.math.atan2(
+        (lineEnd.y - to.center.y).toDouble(),
+        (lineEnd.x - to.center.x).toDouble()
+      )
+    ).toFloat()
 }
 
 private fun DrawScope.drawNodeCircle(
@@ -71,19 +74,23 @@ private fun DrawScope.drawNodeCircle(
     startAngle: Float,
     progress: Float
 ) {
+    val circleSize = Size(
+      width = node.radius * 2,
+      height = node.radius * 2
+    )
+
+    val topLeft = Offset(
+      x = node.center.x - node.radius,
+      y = node.center.y - node.radius
+    )
+
     drawArc(
       startAngle = startAngle,
       sweepAngle = progress * 180f,
       style = Stroke(width = 3f),
-      size = Size(
-        width = node.radius * 2,
-        height = node.radius * 2
-      ),
+      size = circleSize,
       color = Color.White,
-      topLeft = Offset(
-        x = node.center.x - node.radius,
-        y = node.center.y - node.radius
-      ),
+      topLeft = topLeft,
       useCenter = false
     )
 
@@ -91,6 +98,47 @@ private fun DrawScope.drawNodeCircle(
       startAngle = startAngle,
       sweepAngle = progress * -180f,
       style = Stroke(width = 3f),
+      size = circleSize,
+      color = Color.White,
+      topLeft = topLeft,
+      useCenter = false
+    )
+}
+
+private fun DrawScope.drawNodeText(
+    node: OriginNode,
+    textMeasurer: TextMeasurer,
+    progress: Float
+) {
+    val nodeText = textMeasurer.measure(
+      text = node.name,
+      style = TextStyle(
+        color = Color.White.copy(
+          alpha = progress
+        ),
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.sp
+      )
+    )
+
+    drawText(
+      textLayoutResult = nodeText,
+      topLeft = Offset(
+        x = node.center.x - nodeText.size.width / 2,
+        y = node.center.y - nodeText.size.height / 2
+      )
+    )
+}
+
+private fun DrawScope.drawOriginCircle(
+    node: OriginNode,
+    progress: Float
+) {
+    drawArc(
+      startAngle = 0f,
+      sweepAngle = progress * 360f,
+      style = Stroke(width = 3f),
       size = Size(
         width = node.radius * 2,
         height = node.radius * 2
@@ -104,175 +152,199 @@ private fun DrawScope.drawNodeCircle(
     )
 }
 
+private fun DrawScope.drawOriginText(
+    node: OriginNode,
+    textMeasurer: TextMeasurer,
+    progress: Float
+) {
+    val originText = textMeasurer.measure(
+      text = node.name,
+      style = TextStyle(
+        color = Color.White.copy(
+          alpha = progress
+        ),
+        fontSize = 32.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 2.sp
+      )
+    )
+
+    val textOffsetY = 45f * (1f - progress)
+
+    drawText(
+      textLayoutResult = originText,
+      topLeft = Offset(
+        x = node.center.x - originText.size.width / 2,
+        y = node.center.y - originText.size.height / 2 + textOffsetY
+      )
+    )
+}
+
 @Composable
 fun OriginApp() {
 
-  var lifeLineStarted = remember { mutableStateOf(false) }
-  var originCircleStarted = remember { mutableStateOf(false) }
-  var originTextStarted = remember { mutableStateOf(false) }
-  val lifeTextStarted = remember { mutableStateOf(false) }
-  var lifeCircleStarted = remember { mutableStateOf(false) }
-  val textMeasurer = rememberTextMeasurer() 
-  val lifeLineProgress = animateFloatAsState(
-    targetValue = if (lifeLineStarted.value){
+  val lineStarted = remember { mutableStateOf(false) }
+  val originCircleStarted = remember { mutableStateOf(false) }
+  val originTextStarted = remember { mutableStateOf(false) }
+  val nodeCircleStarted = remember { mutableStateOf(false) }
+  val nodeTextStarted = remember { mutableStateOf(false) }
+
+  val textMeasurer = rememberTextMeasurer()
+
+  val lineProgress = animateFloatAsState(
+    targetValue = if (lineStarted.value) {
       1f
     } else {
       0f
     },
     animationSpec = tween(durationMillis = 2800)
   )
+
   val originCircleProgress = animateFloatAsState(
-    targetValue = if (originCircleStarted.value){
+    targetValue = if (originCircleStarted.value) {
       1f
     } else {
       0f
     },
     animationSpec = tween(durationMillis = 1900)
   )
+
   val originTextProgress = animateFloatAsState(
-    targetValue = if (originTextStarted.value){
+    targetValue = if (originTextStarted.value) {
       1f
     } else {
       0f
     },
     animationSpec = tween(durationMillis = 1600)
   )
-  val lifeTextProgress = animateFloatAsState(
-    targetValue = if (lifeTextStarted.value){
+
+  val nodeCircleProgress = animateFloatAsState(
+    targetValue = if (nodeCircleStarted.value) {
       1f
     } else {
       0f
     },
     animationSpec = tween(durationMillis = 1000)
   )
-  val lifeCircleProgress = animateFloatAsState(
-    targetValue = if (lifeCircleStarted.value){
+
+  val nodeTextProgress = animateFloatAsState(
+    targetValue = if (nodeTextStarted.value) {
       1f
     } else {
       0f
     },
     animationSpec = tween(durationMillis = 1000)
   )
-       
-    LaunchedEffect(Unit) {
-      originTextStarted.value = true
-      delay(1200)
-      originCircleStarted.value = true
-      delay(1900)
-      lifeLineStarted.value =  true
-      delay(2800)
-      lifeCircleStarted.value =  true
-      delay(1000)
-      lifeTextStarted.value = true
-    }
-    
-    MaterialTheme {
-        Surface(
-          modifier = Modifier.fillMaxSize(),
-          color = Color.Black
+
+  LaunchedEffect(Unit) {
+    originTextStarted.value = true
+    delay(1200)
+
+    originCircleStarted.value = true
+    delay(1900)
+
+    lineStarted.value = true
+    delay(2800)
+
+    nodeCircleStarted.value = true
+    delay(1000)
+
+    nodeTextStarted.value = true
+  }
+
+  MaterialTheme {
+    Surface(
+      modifier = Modifier.fillMaxSize(),
+      color = Color.Black
+    ) {
+      Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.fillMaxSize(),
+      ) {
+        Canvas(
+          modifier = Modifier.fillMaxSize()
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                Canvas (
-                    modifier = Modifier.fillMaxSize()
-                    ){
-                  val origin = OriginNode(
-                    name = "ORIGIN",
-                    center = Offset(
-                      x = size.width / 2,
-                      y = size.height / 2
-                    ),
-                    radius = 180f
-                  )
-                  val life = OriginNode(
-                    name = "YAŞAM",
-                    center = Offset(
-                      x = size.width / 2 + 450f,
-                      y = size.height / 2 - 330f
-                    ),
-                    radius = 105f
-                  )
-                  val lineEnd = drawConnection(
-                    from = origin,
-                    to = life,
-                    progress = lifeLineProgress.value
-                  )
-                  val lifeStartAngle = Math.toDegrees(
-                    kotlin.math.atan2(
-                      (lineEnd.y - life.center.y).toDouble(),
-                      (lineEnd.x - life.center.x).toDouble()
-                    )
-                  ).toFloat()
+          val origin = OriginNode(
+            name = "ORIGIN",
+            center = Offset(
+              x = size.width / 2,
+              y = size.height / 2
+            ),
+            radius = 180f
+          )
 
-                  drawNodeCircle(
-                    node = life,
-                    startAngle = lifeStartAngle,
-                    progress = lifeCircleProgress.value
-                  )
+          val life = OriginNode(
+            name = "YAŞAM",
+            center = Offset(
+              x = size.width / 2 + 450f,
+              y = size.height / 2 - 330f
+            ),
+            radius = 105f
+          )
 
-                  drawArc(
-                    startAngle = 0f,
-                    sweepAngle = originCircleProgress.value * 360f,
-                    style = Stroke(width = 3f),
-                    size = Size(
-                      width = origin.radius * 2,
-                      height = origin.radius * 2
-                    ),
-                    color = Color.White,
-                    topLeft = Offset(
-                      x = origin.center.x - origin.radius,
-                      y = origin.center.y - origin.radius
-                    ),
-                    useCenter = false
-                  )
-                  val originText = textMeasurer.measure(
-                    text = origin.name,
-                    style = TextStyle(
-                    color = Color.White.copy(
-                      alpha = originTextProgress.value
-                    ),
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                   )
-                )
-                  val lifeText = textMeasurer.measure(
-                    text = life.name,
-                    style = TextStyle(
-                      color = Color.White.copy(
-                        alpha = lifeTextProgress.value
-                      ),
-                      fontSize = 20.sp,
-                      fontWeight = FontWeight.Bold,
-                      letterSpacing = 1.sp
-                    )
-                  )
-                  val originTextOffsetY = 45f * (1f - originTextProgress.value)
-                  
-                  drawText(
-                    textLayoutResult = lifeText,
-                    topLeft = Offset(
-                      x = life.center.x - lifeText.size.width / 2,
-                      y = life.center.y - lifeText.size.height / 2
-                    )
-                  )
-                  drawText(
-                    textLayoutResult = originText,
-                    topLeft = Offset(
-                      x = origin.center.x - originText.size.width / 2,
-                      y = origin.center.y - originText.size.height / 2 + originTextOffsetY
-                      )
-                    )
-                }
-            }
+          val universe = OriginNode(
+            name = "EVREN",
+            center = Offset(
+              x = size.width / 2 - 450f,
+              y = size.height / 2 - 330f
+            ),
+            radius = 105f
+          )
+
+          val lifeStartAngle = drawConnection(
+            from = origin,
+            to = life,
+            progress = lineProgress.value
+          )
+
+          val universeStartAngle = drawConnection(
+            from = origin,
+            to = universe,
+            progress = lineProgress.value
+          )
+
+          drawNodeCircle(
+            node = life,
+            startAngle = lifeStartAngle,
+            progress = nodeCircleProgress.value
+          )
+
+          drawNodeCircle(
+            node = universe,
+            startAngle = universeStartAngle,
+            progress = nodeCircleProgress.value
+          )
+
+          drawOriginCircle(
+            node = origin,
+            progress = originCircleProgress.value
+          )
+
+          drawNodeText(
+            node = life,
+            textMeasurer = textMeasurer,
+            progress = nodeTextProgress.value
+          )
+
+          drawNodeText(
+            node = universe,
+            textMeasurer = textMeasurer,
+            progress = nodeTextProgress.value
+          )
+
+          drawOriginText(
+            node = origin,
+            textMeasurer = textMeasurer,
+            progress = originTextProgress.value
+          )
         }
+      }
     }
+  }
 }
 
 @Preview(showBackground = true)
 @Composable
 private fun OriginAppPreview() {
-    OriginApp()
+  OriginApp()
 }
