@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.drawText
@@ -26,6 +27,12 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+
+private val PlatformSurface = Color(0xFFF1F4F6)
+private val PlatformShadow = Color(0xFF161B22)
+private val PlatformEdge = Color(0xFFFFFFFF)
+private val PlatformBlue = Color(0xFF238CFF)
+private val PlatformBlueSoft = Color(0xFF73B7FF)
 
 private fun DrawScope.drawConnection(
     from: OriginNode,
@@ -55,7 +62,7 @@ private fun DrawScope.drawConnection(
     )
 
     drawLine(
-      color = Color.White,
+      color = Color.White.copy(alpha = 0.78f),
       start = lineStart,
       end = animatedEnd,
       strokeWidth = 3f
@@ -69,38 +76,115 @@ private fun DrawScope.drawConnection(
     ).toFloat()
 }
 
-private fun DrawScope.drawNodeCircle(
+private fun DrawScope.drawNodePlatform(
     node: OriginNode,
     startAngle: Float,
     progress: Float
 ) {
-    val circleSize = Size(
-      width = node.radius * 2,
-      height = node.radius * 2
+    if (progress <= 0f) return
+
+    val diameter = node.radius * 2
+
+    val platformSize = Size(
+      width = diameter,
+      height = diameter
     )
 
-    val topLeft = Offset(
+    val platformTopLeft = Offset(
       x = node.center.x - node.radius,
       y = node.center.y - node.radius
     )
 
+    val shadowOffset = 9f
+
+    val shadowTopLeft = Offset(
+      x = platformTopLeft.x,
+      y = platformTopLeft.y + shadowOffset
+    )
+
+    /*
+     * ALT KATMAN
+     *
+     * Platformun birkaç piksel aşağısında duran koyu disk.
+     * Beyaz yüzeyin havada asılı bir parça gibi algılanmasını sağlıyor.
+     */
+    drawOval(
+      color = PlatformShadow.copy(
+        alpha = 0.80f * progress
+      ),
+      topLeft = shadowTopLeft,
+      size = platformSize
+    )
+
+    /*
+     * YÜZEY
+     *
+     * Progress arttıkça platformun iç yüzeyi beliriyor.
+     */
+    drawOval(
+      color = PlatformSurface.copy(
+        alpha = 0.96f * progress
+      ),
+      topLeft = platformTopLeft,
+      size = platformSize
+    )
+
+    /*
+     * HAFİF İÇ DERİNLİK
+     *
+     * Yüzeyin tamamen düz beyaz bir buton gibi görünmesini engelliyor.
+     */
+    scale(
+      scaleX = 0.90f,
+      scaleY = 0.90f,
+      pivot = node.center
+    ) {
+      drawOval(
+        color = Color(0xFFDCE2E8).copy(
+          alpha = 0.28f * progress
+        ),
+        topLeft = platformTopLeft,
+        size = platformSize
+      )
+    }
+
+    /*
+     * MAVİ İÇ RIM
+     *
+     * Çok hafif. Platformu neon tabelaya çevirmeden
+     * Origin'in mavi görsel dilini yüzeye taşıyor.
+     */
+    drawCircle(
+      color = PlatformBlueSoft.copy(
+        alpha = 0.16f * progress
+      ),
+      radius = node.radius - 7f,
+      center = node.center,
+      style = Stroke(width = 3f)
+    )
+
+    /*
+     * MEVCUT AÇILMA ANİMASYONU
+     *
+     * Çizgi node'a ulaştığı noktadan çember iki yana doğru büyüyor.
+     */
     drawArc(
       startAngle = startAngle,
       sweepAngle = progress * 180f,
-      style = Stroke(width = 3f),
-      size = circleSize,
-      color = Color.White,
-      topLeft = topLeft,
+      style = Stroke(width = 4f),
+      size = platformSize,
+      color = PlatformEdge,
+      topLeft = platformTopLeft,
       useCenter = false
     )
 
     drawArc(
       startAngle = startAngle,
       sweepAngle = progress * -180f,
-      style = Stroke(width = 3f),
-      size = circleSize,
-      color = Color.White,
-      topLeft = topLeft,
+      style = Stroke(width = 4f),
+      size = platformSize,
+      color = PlatformEdge,
+      topLeft = platformTopLeft,
       useCenter = false
     )
 }
@@ -110,10 +194,62 @@ private fun DrawScope.drawNodeText(
     textMeasurer: TextMeasurer,
     progress: Float
 ) {
+    /*
+     * Önce geniş ve saydam yazı:
+     * mavi ışığın yüzey üzerinde yayılması.
+     */
+    val glowText = textMeasurer.measure(
+      text = node.name,
+      style = TextStyle(
+        color = PlatformBlue.copy(
+          alpha = 0.20f * progress
+        ),
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.4.sp
+      )
+    )
+
+    drawText(
+      textLayoutResult = glowText,
+      topLeft = Offset(
+        x = node.center.x - glowText.size.width / 2,
+        y = node.center.y - glowText.size.height / 2 + 2f
+      )
+    )
+
+    /*
+     * Hafif koyu alt baskı:
+     * yazının platform yüzeyine gömülmüş hissini güçlendiriyor.
+     */
+    val engravedText = textMeasurer.measure(
+      text = node.name,
+      style = TextStyle(
+        color = Color(0xFF0A315A).copy(
+          alpha = 0.42f * progress
+        ),
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.sp
+      )
+    )
+
+    drawText(
+      textLayoutResult = engravedText,
+      topLeft = Offset(
+        x = node.center.x - engravedText.size.width / 2,
+        y = node.center.y - engravedText.size.height / 2 + 2f
+      )
+    )
+
+    /*
+     * Asıl mavi yazı.
+     * Koyu baskının 2 px üstünde olduğu için hafif oyuk hissi oluşuyor.
+     */
     val nodeText = textMeasurer.measure(
       text = node.name,
       style = TextStyle(
-        color = Color.White.copy(
+        color = PlatformBlue.copy(
           alpha = progress
         ),
         fontSize = 20.sp,
@@ -290,6 +426,7 @@ fun OriginApp() {
             ),
             radius = 105f
           )
+
           val math = OriginNode(
             name = "MATEMATİK",
             center = Offset(
@@ -298,6 +435,7 @@ fun OriginApp() {
             ),
             radius = 105f
           )
+
           val physics = OriginNode(
             name = "FİZİK",
             center = Offset(
@@ -318,36 +456,38 @@ fun OriginApp() {
             to = universe,
             progress = lineProgress.value
           )
+
           val mathStartAngle = drawConnection(
             from = origin,
             to = math,
             progress = lineProgress.value
           )
+
           val physicsStartAngle = drawConnection(
             from = origin,
             to = physics,
             progress = lineProgress.value
           )
 
-          drawNodeCircle(
+          drawNodePlatform(
             node = life,
             startAngle = lifeStartAngle,
             progress = nodeCircleProgress.value
           )
 
-          drawNodeCircle(
+          drawNodePlatform(
             node = universe,
             startAngle = universeStartAngle,
             progress = nodeCircleProgress.value
           )
 
-          drawNodeCircle(
+          drawNodePlatform(
             node = math,
             startAngle = mathStartAngle,
             progress = nodeCircleProgress.value
           )
 
-          drawNodeCircle(
+          drawNodePlatform(
             node = physics,
             startAngle = physicsStartAngle,
             progress = nodeCircleProgress.value
@@ -369,7 +509,7 @@ fun OriginApp() {
             textMeasurer = textMeasurer,
             progress = nodeTextProgress.value
           )
-          
+
           drawNodeText(
             node = math,
             textMeasurer = textMeasurer,
