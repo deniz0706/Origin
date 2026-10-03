@@ -84,8 +84,10 @@ private val GrooveDark = Color(0xFFC2C1B9)
 private val GrooveLight = Color(0xFFFFFFFF)
 
 private val Cobalt = Color(0xFF1E3A8A)
-private val EngraveWall = Color(0xFF10245E)
-private val EngraveLip = Color(0xFFF8F7F3)
+private val EngraveWall = Color(0xFF0E2160)
+private val EngraveLit = Color(0xFFC9D2EA)
+private val EngraveLip = Color(0xFFFFFFFF)
+private val EngraveRecess = Color(0xFFD9D8D2)
 
 // ---------------------------------------------------------------------------
 // Ölçüler
@@ -173,6 +175,13 @@ private fun exitRect(
     return max(0f, t)
 }
 
+/**
+ * Bir kaidenin ekrandaki dış çizgisi.
+ *
+ * Silüet = üst elips ∪ alt elips ∪ aradaki dikdörtgen. Üçü de dışbükeydir ve
+ * ortak bir iç noktaya sahiptir; bu yüzden bir ışının silüetten çıkış mesafesi
+ * üç parçanın çıkış mesafelerinin en büyüğüdür.
+ */
 private class Silhouette(
     val base: Offset,
     val rx: Float,
@@ -190,18 +199,22 @@ private class Silhouette(
         ),
     )
 
+    /** Silüetin, orta noktadan [angleDeg] yönündeki noktası. 0° = sağ, 90° = aşağı. */
     fun pointAt(angleDeg: Float): Offset {
         val rad = Math.toRadians(angleDeg.toDouble())
         val dir = Offset(cos(rad).toFloat(), sin(rad).toFloat())
         return mid + dir * exitDistance(mid, dir)
     }
 
+    /** Zemindeki bir hattın (taban merkezinden çıkan) silüeti terk ettiği nokta. */
     fun groundExit(dir: Offset): Offset = base + dir * exitDistance(base, dir)
 
+    /** [pointAt] fonksiyonunun tersi: noktanın orta noktadan görünen açısı. */
     fun angleOf(p: Offset): Float = Math.toDegrees(
         atan2((p.y - mid.y).toDouble(), (p.x - mid.x).toDouble()),
     ).toFloat()
 
+    /** Silüet çizgisinin [startDeg] noktasından geriye ve ileriye doğru bir parçası. */
     fun outline(startDeg: Float, backDeg: Float, forwardDeg: Float): Path {
         val from = startDeg - backDeg
         val span = backDeg + forwardDeg
@@ -220,22 +233,30 @@ private class Silhouette(
 // Sahne modeli
 // ---------------------------------------------------------------------------
 
+/**
+ * [OriginNode.center]  = kaidenin zeminle temas eden taban merkezi
+ * [OriginNode.radius]  = taban yarıçapı (yatay)
+ */
 private class Stone(val node: OriginNode, val label: TextLayoutResult) {
     val rx = node.radius
     val ry = node.radius * ViewSquash
 
     val thickness = node.radius * StoneThickness
 
+    /** Yazının oyulduğu, tamamen yükselmiş üst yüzeyin merkezi. */
     val labelCenter = Offset(node.center.x, node.center.y - thickness)
 
     fun silhouette(rise: Float) = Silhouette(node.center, rx, ry, thickness * rise)
 }
 
+/** ORIGIN'den bir dış platforma giden bağlantı ve ondan türeyen tüm zamanlar. */
 private class Link(
     val stone: Stone,
     val lineStart: Offset,
     val lineEnd: Offset,
+    /** Hedef dış sınırının temas noktasındaki açısı. */
     val contactAngle: Float,
+    /** ORIGIN rim'inde bu bağlantının bulunduğu konum (0..1). */
     val rimTrigger: Float,
 ) {
     val lineStartMs = Timing.RimStart + rimTrigger * Timing.RimMs
@@ -257,6 +278,8 @@ private class Piece(val stone: Stone, val link: Link?) {
 
 private class Scene(val pieces: List<Piece>) {
     val links: List<Link> = pieces.mapNotNull { it.link }
+
+    /** Arkadan öne: üstteki platformlar önce çizilir. */
     val drawOrder: List<Piece> = pieces.sortedBy { it.stone.node.center.y }
 }
 
@@ -264,18 +287,22 @@ private fun buildLink(origin: Stone, target: Stone): Link {
     val delta = target.node.center - origin.node.center
     val dir = delta / delta.getDistance()
 
+    // Çizgi zeminde yatar. ORIGIN'in görünen kenarında başlar...
     val originSilhouette = origin.silhouette(1f)
     val exitPoint = originSilhouette.groundExit(dir)
 
+    // ...ve hedefin tabanına (zemindeki dış sınırına) kadar gider.
     val targetFootprint = target.silhouette(0f)
     val entryPoint = targetFootprint.groundExit(-dir)
 
+    // Rim 12 yönünden (-90°) başlayıp saat yönünde ilerler. Bu noktaya
+    // ulaştığı an = rim'in kat ettiği oran.
     val angle = originSilhouette.angleOf(exitPoint)
     val trigger = (((angle + 90f) % 360f) + 360f) % 360f / 360f
 
     return Link(
         stone = target,
-        lineStart = exitPoint - dir * 1.5f,
+        lineStart = exitPoint - dir * 1.5f, // taşın altında kalan 1.5px: boşluk bırakmaz
         lineEnd = entryPoint,
         contactAngle = targetFootprint.angleOf(entryPoint),
         rimTrigger = trigger,
@@ -294,11 +321,9 @@ private fun buildScene(
     val dx = width * 0.285f
     val dy = min(height * 0.20f, dx * 1.5f)
 
-    val outerRadius = minOf(
-        width / 2f - dx - width * 0.05f,
-        dx * 0.64f,
-        dy * 0.46f,
-    )
+    // Dört dış platform aynı boyutta. Yarıçap ekrana ve komşulara göre sınırlanır;
+    // yazı boyutu ise bu yarıçaptan, en uzun kelimeye (MATEMATİK) göre türetilir.
+    val outerRadius = minOf(width / 2f - dx - width * 0.05f, dx * 0.64f, dy * 0.46f)
     val originRadius = outerRadius * OriginScale
 
     fun style(px: Float) = TextStyle(
@@ -310,12 +335,9 @@ private fun buildScene(
     )
 
     val refPx = 100f
-    fun widthPerPx(text: String) =
-        measurer.measure(text = text, style = style(refPx)).size.width / refPx
+    fun widthPerPx(text: String) = measurer.measure(text = text, style = style(refPx)).size.width / refPx
 
-    val outerFont =
-        outerRadius * 2f * OuterLabelFill / widthPerPx("MATEMATİK")
-
+    val outerFont = outerRadius * 2f * OuterLabelFill / widthPerPx("MATEMATİK")
     val originFont = min(
         outerFont * 1.3f,
         originRadius * 2f * 0.6f / widthPerPx("ORIGIN"),
@@ -345,6 +367,7 @@ private fun buildScene(
 // Çizim: zemin katmanı
 // ---------------------------------------------------------------------------
 
+/** Yumuşak kenarlı, dikey olarak ezilmiş disk. Blur kullanmadan temas gölgesi verir. */
 private fun DrawScope.softDisc(
     center: Offset,
     radius: Float,
@@ -353,7 +376,6 @@ private fun DrawScope.softDisc(
     solidUntil: Float,
 ) {
     if (alpha <= 0f) return
-
     val brush = Brush.radialGradient(
         0f to color.copy(alpha = alpha),
         solidUntil to color.copy(alpha = alpha),
@@ -361,22 +383,18 @@ private fun DrawScope.softDisc(
         center = center,
         radius = radius,
     )
-
     withTransform({ scale(1f, ViewSquash, pivot = center) }) {
-        drawCircle(
-            brush = brush,
-            radius = radius,
-            center = center,
-        )
+        drawCircle(brush = brush, radius = radius, center = center)
     }
 }
 
+/** Taşın hemen dibindeki gölge. Platform havada durmaz, zemine oturur. */
 private fun DrawScope.drawContactShadow(stone: Stone, rise: Float) {
     if (rise <= 0f) return
-
     val c = stone.node.center
     val r = stone.rx
 
+    // geniş, çok hafif, her yöne eşit yayılır
     softDisc(
         center = c + Offset(r * 0.004f, r * 0.012f),
         radius = r * 1.09f,
@@ -384,7 +402,7 @@ private fun DrawScope.drawContactShadow(stone: Stone, rise: Float) {
         alpha = 0.06f * rise,
         solidUntil = 0.88f,
     )
-
+    // dar: taşın dibindeki temas gölgesi
     softDisc(
         center = c + Offset(r * 0.004f, r * 0.010f),
         radius = r * 1.03f,
@@ -394,6 +412,7 @@ private fun DrawScope.drawContactShadow(stone: Stone, rise: Float) {
     )
 }
 
+/** Zemine oyulmuş ince bağlantı: koyu çizgi + altında çok hafif ışık. */
 private fun DrawScope.drawLink(link: Link, ms: Float) {
     val progress = ease(phase(ms, link.lineStartMs, Timing.LineMs))
     if (progress <= 0f) return
@@ -409,7 +428,6 @@ private fun DrawScope.drawLink(link: Link, ms: Float) {
         strokeWidth = width,
         cap = StrokeCap.Round,
     )
-
     drawLine(
         color = GrooveDark,
         start = link.lineStart,
@@ -423,6 +441,13 @@ private fun DrawScope.drawLink(link: Link, ms: Float) {
 // Çizim: taş
 // ---------------------------------------------------------------------------
 
+/**
+ * Tek kademe: gerçek yan yüzey + pah (bevel) halkası + üst yüzey.
+ *
+ * Yan yüzey tek bir kapalı Path'tir:
+ *   üst elipsin sağ noktası → aşağı → alt elipsin ön yarısı → yukarı →
+ *   üst elipsin ön yarısı (geri) → kapat.
+ */
 private fun DrawScope.drawTier(
     base: Offset,
     rx: Float,
@@ -436,22 +461,13 @@ private fun DrawScope.drawTier(
     val side = Path().apply {
         moveTo(base.x + rx, top.y)
         lineTo(base.x + rx, base.y)
-        arcTo(
-            Rect(base.x - rx, base.y - ry, base.x + rx, base.y + ry),
-            0f,
-            180f,
-            false,
-        )
+        arcTo(Rect(base.x - rx, base.y - ry, base.x + rx, base.y + ry), 0f, 180f, false)
         lineTo(base.x - rx, top.y)
-        arcTo(
-            Rect(top.x - rx, top.y - ry, top.x + rx, top.y + ry),
-            180f,
-            -180f,
-            false,
-        )
+        arcTo(Rect(top.x - rx, top.y - ry, top.x + rx, top.y + ry), 180f, -180f, false)
         close()
     }
 
+    // Yan yüzey: soldan sağa ton farkı (ışık sol üstten).
     drawPath(
         path = side,
         brush = Brush.horizontalGradient(
@@ -463,7 +479,7 @@ private fun DrawScope.drawTier(
         ),
         alpha = alpha,
     )
-
+    // Tabana doğru hafif kararma (zemine yakın köşe gölgesi).
     drawPath(
         path = side,
         brush = Brush.verticalGradient(
@@ -476,6 +492,7 @@ private fun DrawScope.drawTier(
         alpha = alpha,
     )
 
+    // Üst yüzey: çok hafif doğrusal ton farkı (radyal değil, yastık gibi şişmez).
     drawOval(
         brush = Brush.linearGradient(
             colors = listOf(TopLight, TopShade),
@@ -487,27 +504,17 @@ private fun DrawScope.drawTier(
         alpha = alpha,
     )
 
+    // Bevel: sadece kenar boyunca dar bir band. Sol-üstte açık, sağ-altta biraz koyu.
     val band = bevel * 0.7f
     val inset = band / 2f
-
     drawOval(
         brush = Brush.linearGradient(
-            colors = listOf(
-                Color(0xFFFFFFFF),
-                TopShade,
-                EdgeShade,
-            ),
+            colors = listOf(Color(0xFFFFFFFF), TopShade, EdgeShade),
             start = Offset(top.x - rx * 0.7f, top.y - ry * 0.7f),
             end = Offset(top.x + rx * 0.7f, top.y + ry * 0.7f),
         ),
-        topLeft = Offset(
-            top.x - rx + inset,
-            top.y - ry + inset,
-        ),
-        size = Size(
-            (rx - inset) * 2f,
-            (ry - inset) * 2f,
-        ),
+        topLeft = Offset(top.x - rx + inset, top.y - ry + inset),
+        size = Size((rx - inset) * 2f, (ry - inset) * 2f),
         alpha = alpha,
         style = Stroke(width = band),
     )
@@ -527,7 +534,7 @@ private fun DrawScope.drawStoneBody(stone: Stone, rise: Float) {
 }
 
 // ---------------------------------------------------------------------------
-// Çizim: dış çizgi ve engraving
+// Çizim: dış çizgi (rim) ve yazı
 // ---------------------------------------------------------------------------
 
 private fun DrawScope.drawContour(piece: Piece, ms: Float) {
@@ -536,61 +543,28 @@ private fun DrawScope.drawContour(piece: Piece, ms: Float) {
 
     val path: Path
     val visibility: Float
-
     if (link == null) {
-        val sweep =
-            360f * phase(ms, Timing.RimStart, Timing.RimMs)
-
+        // ORIGIN: 12 yönünden başlar, saat yönünde tek yönde ilerler.
+        val sweep = 360f * phase(ms, Timing.RimStart, Timing.RimMs)
         if (sweep <= 0f) return
-
-        path = stone
-            .silhouette(1f)
-            .outline(
-                startDeg = -90f,
-                backDeg = 0f,
-                forwardDeg = sweep,
-            )
-
-        visibility =
-            1f - ease(
-                phase(
-                    ms,
-                    Timing.RimStart + Timing.RimMs,
-                    Timing.ContourFadeMs,
-                ),
-            )
+        path = stone.silhouette(1f).outline(startDeg = -90f, backDeg = 0f, forwardDeg = sweep)
+        // Rim tamamlanınca çizgi geri çekilir.
+        visibility = 1f - ease(phase(ms, Timing.RimStart + Timing.RimMs, Timing.ContourFadeMs))
     } else {
-        val trace =
-            ease(
-                phase(
-                    ms,
-                    link.arriveMs,
-                    Timing.TraceMs,
-                ),
-            )
-
+        // Hedef: çizginin değdiği noktadan iki zıt yönde ilerler.
+        val trace = ease(phase(ms, link.arriveMs, Timing.TraceMs))
         if (trace <= 0f) return
-
         val half = 180f * trace
-
-        path = stone
-            .silhouette(piece.rise(ms))
-            .outline(
-                startDeg = link.contactAngle,
-                backDeg = half,
-                forwardDeg = half,
-            )
-
-        visibility =
-            1f - ease(
-                phase(
-                    ms,
-                    link.riseStartMs + Timing.RiseMs * 0.4f,
-                    Timing.ContourFadeMs,
-                ),
-            )
+        path = stone.silhouette(piece.rise(ms)).outline(
+            startDeg = link.contactAngle,
+            backDeg = half,
+            forwardDeg = half,
+        )
+        // Taş yükselirken çizgi geri çekilir; final ekranda keskin çember kalmaz.
+        visibility = 1f - ease(
+            phase(ms, link.riseStartMs + Timing.RiseMs * 0.4f, Timing.ContourFadeMs),
+        )
     }
-
     if (visibility <= 0.01f) return
 
     drawPath(
@@ -606,14 +580,8 @@ private fun DrawScope.drawContour(piece: Piece, ms: Float) {
 }
 
 /**
- * Oyulmuş ve içi kobalt pigmentle doldurulmuş yazı.
- *
- * Işık sol-üstten geldiği için oyukta:
- * - sol-üst iç duvar karanlık,
- * - sağ-alt dudak ışık alır,
- * - merkezde pigment dolu kalır.
- *
- * Offsetler 1 fiziksel pikselden küçüktür; görünür bir outline oluşturmaz.
+ * Taşa işlenmiş yazı (letterpress): dolu kobalt gövde + altında yarım pikselik
+ * tek bir taş tonu highlight. Gövdenin içi boşaltılmaz, offset bir pikselden küçüktür.
  */
 private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
     val alpha = piece.labelAlpha(ms)
@@ -621,27 +589,15 @@ private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
 
     val stone = piece.stone
     val size = stone.label.size
-
     val topLeft = Offset(
         x = stone.labelCenter.x - size.width / 2f,
         y = stone.labelCenter.y - size.height / 2f,
     )
-
-    // Oyuk içindeki karanlık duvar.
     drawText(
         textLayoutResult = stone.label,
-        color = EngraveWall.copy(alpha = 0.42f * alpha),
-        topLeft = topLeft + Offset(-0.45f, -0.45f),
+        color = EngraveLip.copy(alpha = 0.95f * alpha),
+        topLeft = topLeft + Offset(0.5f, 1f),
     )
-
-    // Taşın oyuk kenarında yakaladığı ince ışık.
-    drawText(
-        textLayoutResult = stone.label,
-        color = EngraveLip.copy(alpha = 0.85f * alpha),
-        topLeft = topLeft + Offset(0.45f, 0.55f),
-    )
-
-    // Oyuk içine doldurulmuş kobalt pigment.
     drawText(
         textLayoutResult = stone.label,
         color = Cobalt.copy(alpha = alpha),
@@ -650,31 +606,25 @@ private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
 }
 
 private fun DrawScope.drawScene(scene: Scene, ms: Float) {
-    scene.drawOrder.forEach {
-        drawContactShadow(it.stone, it.rise(ms))
-    }
+    // 1) Zemin: gölgeler, sonra zemine oyulmuş bağlantılar
+    scene.drawOrder.forEach { drawContactShadow(it.stone, it.rise(ms)) }
+    scene.links.forEach { drawLink(it, ms) }
 
-    scene.links.forEach {
-        drawLink(it, ms)
-    }
+    // 2) Taşlar (bağlantıların üstünde; çizgi taşın arkasından çıkar)
+    scene.drawOrder.forEach { drawStoneBody(it.stone, it.rise(ms)) }
 
-    scene.drawOrder.forEach {
-        drawStoneBody(it.stone, it.rise(ms))
-    }
+    // 3) Dış çizgiler
+    scene.drawOrder.forEach { drawContour(it, ms) }
 
-    scene.drawOrder.forEach {
-        drawContour(it, ms)
-    }
-
-    scene.drawOrder.forEach {
-        drawLabel(it, ms)
-    }
+    // 4) Yazılar
+    scene.drawOrder.forEach { drawLabel(it, ms) }
 }
 
 // ---------------------------------------------------------------------------
 // Compose
 // ---------------------------------------------------------------------------
 
+/** Animasyonu başlatan uygulama girişi. */
 @Composable
 fun OriginApp() {
     MaterialTheme {
@@ -693,7 +643,6 @@ fun OriginScreen(modifier: Modifier = Modifier) {
 
     LaunchedEffect(Unit) {
         delay(200)
-
         clock.animateTo(
             targetValue = Timing.ClockMs,
             animationSpec = tween(
@@ -703,10 +652,8 @@ fun OriginScreen(modifier: Modifier = Modifier) {
         )
     }
 
-    OriginCanvas(
-        timeMs = { clock.value },
-        modifier = modifier,
-    )
+    // Saat sadece çizim aşamasında okunur: animasyon recomposition üretmez.
+    OriginCanvas(timeMs = { clock.value }, modifier = modifier)
 }
 
 @Composable
@@ -717,27 +664,12 @@ fun OriginCanvas(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer()
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .safeDrawingPadding(),
-    ) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().safeDrawingPadding()) {
         val widthPx = constraints.maxWidth.toFloat()
         val heightPx = constraints.maxHeight.toFloat()
 
-        val scene = remember(
-            widthPx,
-            heightPx,
-            density.density,
-            density.fontScale,
-            measurer,
-        ) {
-            buildScene(
-                widthPx,
-                heightPx,
-                density,
-                measurer,
-            )
+        val scene = remember(widthPx, heightPx, density.density, density.fontScale, measurer) {
+            buildScene(widthPx, heightPx, density, measurer)
         }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -746,15 +678,9 @@ fun OriginCanvas(
     }
 }
 
-@Preview(
-    showBackground = true,
-    backgroundColor = 0xFFF5F4F0,
-    widthDp = 411,
-    heightDp = 891,
-)
+@Preview(showBackground = true, backgroundColor = 0xFFF5F4F0, widthDp = 411, heightDp = 891)
 @Composable
 private fun OriginScreenPreview() {
-    OriginCanvas(
-        timeMs = { Timing.ClockMs },
-    )
+    // Animasyonun bittiği son hal.
+    OriginCanvas(timeMs = { Timing.ClockMs })
 }
