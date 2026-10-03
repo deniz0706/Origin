@@ -1,753 +1,726 @@
 package com.deniz0706.origin
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import kotlinx.coroutines.delay
 import kotlin.math.atan2
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
 import kotlin.math.sqrt
 
-private val Background = Color(0xFFF8F8F6)
+/*
+ * ORIGIN ana ekranı
+ * =================
+ *
+ * Sahne, beyaz bir zemin üzerinde duran beş alçak taş kaideden oluşur.
+ *
+ * GEOMETRİ
+ *   Her kaide iki kademeli bir silindirdir (alt kademe + daha dar üst kademe).
+ *   Kalınlık "üst üste oval" ile değil, gerçek bir yan yüzey Path'i ile çizilir:
+ *   üst kenar elipsinin ön yarısı + iki dikey kenar + alt kenar elipsinin ön yarısı.
+ *
+ * ANİMASYON (nedensellik zinciri)
+ *   Tek bir saat (ms) vardır. Hiçbir bağlantının zamanı elle verilmez:
+ *
+ *   1. ORIGIN yükselir, yazısı belirir.
+ *   2. ORIGIN'in dış çizgisi (silüet) 12 yönünden saat yönünde çizilir.
+ *   3. Her bağlantı noktasının rim üzerindeki AÇISAL konumu geometriden hesaplanır
+ *      (zemindeki hat, silüeti hangi noktada terk ediyorsa orası).
+ *      Rim o açıya ulaştığı ms'de çizgi tam o noktadan büyümeye başlar.
+ *   4. Çizgi hedefe varınca hedefin dış sınırı, temas noktasından iki zıt yöne
+ *      ilerleyerek tamamlanır, taş yükselir, en son yazısı belirir.
+ */
 
-private val StoneTop = Color(0xFFFCFCFA)
-private val StoneInner = Color(0xFFF4F4F1)
-private val StoneSide = Color(0xFFD8D8D3)
-private val StoneSideDark = Color(0xFFC8C8C2)
-private val StoneEdge = Color(0xFFE2E2DD)
+// ---------------------------------------------------------------------------
+// Palet
+// ---------------------------------------------------------------------------
 
-private val GroundShadow = Color(0xFF8C8C86)
+private val Paper = Color(0xFFF9F9F6)
 
-private val TextBlue = Color(0xFF1769AA)
-private val ConnectionColor = Color(0xFFB9B9B3)
+private val BevelLight = Color(0xFFFFFFFF)
+private val BevelShade = Color(0xFFE7E6E1)
+private val TopLight = Color(0xFFFEFEFC)
+private val TopShade = Color(0xFFF1F0EC)
+private val BevelLine = Color(0xFFDDDCD6)
 
-private fun segmentProgress(
-  progress: Float,
-  start: Float,
-  end: Float
-): Float {
-  if (end <= start) return 0f
+private val SideLit = Color(0xFFE9E8E3)
+private val SideMid = Color(0xFFDDDCD6)
+private val SideShade = Color(0xFFC5C4BD)
+private val SideOcclusion = Color(0x26403F38)
 
-  return ((progress - start) / (end - start))
-    .coerceIn(0f, 1f)
+private val ShadowTone = Color(0xFF55544D)
+
+private val Ink = Color(0xFFB0AFA7)
+private val GrooveDark = Color(0xFFC2C1B9)
+private val GrooveLight = Color(0xFFFFFFFF)
+
+private val Cobalt = Color(0xFF2146A8)
+private val CobaltDeep = Color(0xFF142C73)
+private val EngraveLip = Color(0xFFFFFFFF)
+
+// ---------------------------------------------------------------------------
+// Ölçüler
+// ---------------------------------------------------------------------------
+
+/** Yukarıdan bakış: dairenin dikey ölçeği. 1f = tam üstten, küçüldükçe daha oval. */
+private const val ViewSquash = 0.82f
+
+/** Üst kademenin alt kademeye oranı. */
+private const val CapRatio = 0.88f
+
+/** Dış platformlarda yazının üst kademe çapına oranı (MATEMATİK en geniş yazı). */
+private const val OuterLabelFill = 0.82f
+
+private const val OriginScale = 1.2f
+
+// ---------------------------------------------------------------------------
+// Zaman çizelgesi (ms)
+// ---------------------------------------------------------------------------
+
+private object Timing {
+    const val ClockMs = 6000f
+
+    const val OriginRiseMs = 800f
+    const val OriginTextStart = 800f
+
+    /** Rim çizimi: 12 yönünden başlar, saat yönünde 360° döner. */
+    const val RimStart = 1100f
+    const val RimMs = 2400f
+
+    /** Bağlantı çizgisinin büyümesi. Başlangıcı rim'e bağlıdır, buradan verilmez. */
+    const val LineMs = 700f
+
+    /** Hedef dış sınırının temas noktasından iki yöne yayılması. */
+    const val TraceMs = 450f
+
+    /** Yükselme, dış sınır yayılırken (bu oranda) başlar. */
+    const val RiseOverlap = 0.8f
+    const val RiseMs = 700f
+
+    const val TextMs = 450f
 }
 
-private fun DrawScope.connectionAngle(
-  from: OriginNode,
-  to: OriginNode
-): Float {
-  val dx = to.center.x - from.center.x
-  val dy = to.center.y - from.center.y
+private fun phase(t: Float, start: Float, duration: Float): Float =
+    ((t - start) / duration).coerceIn(0f, 1f)
 
-  return Math.toDegrees(
-    atan2(
-      dy.toDouble(),
-      dx.toDouble()
+private fun ease(x: Float): Float = FastOutSlowInEasing.transform(x)
+
+// ---------------------------------------------------------------------------
+// Geometri: silüet
+// ---------------------------------------------------------------------------
+
+private fun exitEllipse(from: Offset, dir: Offset, center: Offset, rx: Float, ry: Float): Float {
+    val px = (from.x - center.x) / rx
+    val py = (from.y - center.y) / ry
+    val dx = dir.x / rx
+    val dy = dir.y / ry
+    val a = dx * dx + dy * dy
+    val b = 2f * (px * dx + py * dy)
+    val c = px * px + py * py - 1f
+    val disc = b * b - 4f * a * c
+    if (disc < 0f) return 0f
+    return max(0f, (-b + sqrt(disc)) / (2f * a))
+}
+
+private fun exitRect(
+    from: Offset,
+    dir: Offset,
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+): Float {
+    var t = Float.MAX_VALUE
+    if (dir.x > 1e-6f) t = min(t, (right - from.x) / dir.x)
+    else if (dir.x < -1e-6f) t = min(t, (left - from.x) / dir.x)
+    if (dir.y > 1e-6f) t = min(t, (bottom - from.y) / dir.y)
+    else if (dir.y < -1e-6f) t = min(t, (top - from.y) / dir.y)
+    return max(0f, t)
+}
+
+/**
+ * Bir kaidenin ekrandaki dış çizgisi.
+ *
+ * Silüet = üst elips ∪ alt elips ∪ aradaki dikdörtgen. Üçü de dışbükeydir ve
+ * ortak bir iç noktaya sahiptir; bu yüzden bir ışının silüetten çıkış mesafesi
+ * üç parçanın çıkış mesafelerinin en büyüğüdür.
+ */
+private class Silhouette(
+    val base: Offset,
+    val rx: Float,
+    val ry: Float,
+    val height: Float,
+) {
+    private val top = Offset(base.x, base.y - height)
+    private val mid = Offset(base.x, base.y - height / 2f)
+
+    private fun exitDistance(from: Offset, dir: Offset): Float = max(
+        exitEllipse(from, dir, base, rx, ry),
+        max(
+            exitEllipse(from, dir, top, rx, ry),
+            exitRect(from, dir, base.x - rx, top.y, base.x + rx, base.y),
+        ),
     )
-  ).toFloat()
+
+    /** Silüetin, orta noktadan [angleDeg] yönündeki noktası. 0° = sağ, 90° = aşağı. */
+    fun pointAt(angleDeg: Float): Offset {
+        val rad = Math.toRadians(angleDeg.toDouble())
+        val dir = Offset(cos(rad).toFloat(), sin(rad).toFloat())
+        return mid + dir * exitDistance(mid, dir)
+    }
+
+    /** Zemindeki bir hattın (taban merkezinden çıkan) silüeti terk ettiği nokta. */
+    fun groundExit(dir: Offset): Offset = base + dir * exitDistance(base, dir)
+
+    /** [pointAt] fonksiyonunun tersi: noktanın orta noktadan görünen açısı. */
+    fun angleOf(p: Offset): Float = Math.toDegrees(
+        atan2((p.y - mid.y).toDouble(), (p.x - mid.x).toDouble()),
+    ).toFloat()
+
+    /** Silüet çizgisinin [startDeg] noktasından geriye ve ileriye doğru bir parçası. */
+    fun outline(startDeg: Float, backDeg: Float, forwardDeg: Float): Path {
+        val from = startDeg - backDeg
+        val span = backDeg + forwardDeg
+        val steps = max(2, ceil(span / 2f).toInt())
+        return Path().apply {
+            for (i in 0..steps) {
+                val p = pointAt(from + span * i / steps)
+                if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y)
+            }
+            if (span >= 359.5f) close()
+        }
+    }
 }
 
-private fun DrawScope.drawConnection(
-  from: OriginNode,
-  to: OriginNode,
-  progress: Float
-): Float {
-  val dx = to.center.x - from.center.x
-  val dy = to.center.y - from.center.y
+// ---------------------------------------------------------------------------
+// Sahne modeli
+// ---------------------------------------------------------------------------
 
-  val distance = sqrt(
-    dx * dx + dy * dy
-  )
+/**
+ * [OriginNode.center]  = kaidenin zeminle temas eden taban merkezi
+ * [OriginNode.radius]  = taban yarıçapı (yatay)
+ */
+private class Stone(val node: OriginNode, val label: TextLayoutResult) {
+    val rx = node.radius
+    val ry = node.radius * ViewSquash
 
-  val fromRatio = from.radius / distance
-  val toRatio = to.radius / distance
+    val baseHeight = node.radius * 0.095f
+    val capHeight = node.radius * 0.07f
+    val capRadius = node.radius * CapRatio
 
-  val lineStart = Offset(
-    x = from.center.x + dx * fromRatio,
-    y = from.center.y + dy * fromRatio
-  )
+    /** Yazının oturduğu, tamamen yükselmiş üst yüzeyin merkezi. */
+    val labelCenter = Offset(node.center.x, node.center.y - baseHeight - capHeight)
 
-  val lineEnd = Offset(
-    x = to.center.x - dx * toRatio,
-    y = to.center.y - dy * toRatio
-  )
+    fun silhouette(rise: Float) = Silhouette(node.center, rx, ry, baseHeight * rise)
+}
 
-  val animatedEnd = Offset(
-    x = lineStart.x +
-      (lineEnd.x - lineStart.x) * progress,
-    y = lineStart.y +
-      (lineEnd.y - lineStart.y) * progress
-  )
+/** ORIGIN'den bir dış platforma giden bağlantı ve ondan türeyen tüm zamanlar. */
+private class Link(
+    val stone: Stone,
+    val lineStart: Offset,
+    val lineEnd: Offset,
+    /** Hedef dış sınırının temas noktasındaki açısı. */
+    val contactAngle: Float,
+    /** ORIGIN rim'inde bu bağlantının bulunduğu konum (0..1). */
+    val rimTrigger: Float,
+) {
+    val lineStartMs = Timing.RimStart + rimTrigger * Timing.RimMs
+    val arriveMs = lineStartMs + Timing.LineMs
+    val riseStartMs = arriveMs + Timing.TraceMs * Timing.RiseOverlap
+    val textStartMs = riseStartMs + Timing.RiseMs
+}
 
-  if (progress > 0f) {
+private class Piece(val stone: Stone, val link: Link?) {
+    fun rise(ms: Float): Float = ease(
+        if (link == null) phase(ms, 0f, Timing.OriginRiseMs)
+        else phase(ms, link.riseStartMs, Timing.RiseMs),
+    )
+
+    fun labelAlpha(ms: Float): Float =
+        if (link == null) phase(ms, Timing.OriginTextStart, Timing.TextMs)
+        else phase(ms, link.textStartMs, Timing.TextMs)
+}
+
+private class Scene(val pieces: List<Piece>) {
+    val links: List<Link> = pieces.mapNotNull { it.link }
+
+    /** Arkadan öne: üstteki platformlar önce çizilir. */
+    val drawOrder: List<Piece> = pieces.sortedBy { it.stone.node.center.y }
+}
+
+private fun buildLink(origin: Stone, target: Stone): Link {
+    val delta = target.node.center - origin.node.center
+    val dir = delta / delta.getDistance()
+
+    // Çizgi zeminde yatar. ORIGIN'in görünen kenarında başlar...
+    val originSilhouette = origin.silhouette(1f)
+    val exitPoint = originSilhouette.groundExit(dir)
+
+    // ...ve hedefin tabanına (zemindeki dış sınırına) kadar gider.
+    val targetFootprint = target.silhouette(0f)
+    val entryPoint = targetFootprint.groundExit(-dir)
+
+    // Rim 12 yönünden (-90°) başlayıp saat yönünde ilerler. Bu noktaya
+    // ulaştığı an = rim'in kat ettiği oran.
+    val angle = originSilhouette.angleOf(exitPoint)
+    val trigger = (((angle + 90f) % 360f) + 360f) % 360f / 360f
+
+    return Link(
+        stone = target,
+        lineStart = exitPoint - dir * 1.5f, // taşın altında kalan 1.5px: boşluk bırakmaz
+        lineEnd = entryPoint,
+        contactAngle = targetFootprint.angleOf(entryPoint),
+        rimTrigger = trigger,
+    )
+}
+
+private fun buildScene(
+    width: Float,
+    height: Float,
+    density: Density,
+    measurer: TextMeasurer,
+): Scene {
+    val cx = width / 2f
+    val cy = height / 2f
+
+    val dx = width * 0.285f
+    val dy = min(height * 0.20f, dx * 1.5f)
+
+    // Dört dış platform aynı boyutta. Yarıçap ekrana ve komşulara göre sınırlanır;
+    // yazı boyutu ise bu yarıçaptan, en uzun kelimeye (MATEMATİK) göre türetilir.
+    val outerRadius = minOf(width / 2f - dx - width * 0.05f, dx * 0.64f, dy * 0.42f)
+    val originRadius = outerRadius * OriginScale
+
+    fun style(px: Float) = TextStyle(
+        color = Cobalt,
+        fontSize = with(density) { px.toSp() },
+        fontWeight = FontWeight.SemiBold,
+        fontFamily = FontFamily.SansSerif,
+        letterSpacing = 0.06f.em,
+    )
+
+    val refPx = 100f
+    fun widthPerPx(text: String) = measurer.measure(text = text, style = style(refPx)).size.width / refPx
+
+    val outerFont = outerRadius * CapRatio * 2f * OuterLabelFill / widthPerPx("MATEMATİK")
+    val originFont = min(
+        outerFont * 1.3f,
+        originRadius * CapRatio * 2f * 0.62f / widthPerPx("ORIGIN"),
+    )
+
+    fun stone(name: String, center: Offset, radius: Float, fontPx: Float) = Stone(
+        node = OriginNode(name = name, center = center, radius = radius),
+        label = measurer.measure(text = name, style = style(fontPx)),
+    )
+
+    val origin = stone("ORIGIN", Offset(cx, cy), originRadius, originFont)
+
+    val targets = listOf(
+        stone("YAŞAM", Offset(cx + dx, cy - dy), outerRadius, outerFont),
+        stone("FİZİK", Offset(cx + dx, cy + dy), outerRadius, outerFont),
+        stone("MATEMATİK", Offset(cx - dx, cy + dy), outerRadius, outerFont),
+        stone("EVREN", Offset(cx - dx, cy - dy), outerRadius, outerFont),
+    )
+
+    return Scene(
+        pieces = listOf(Piece(origin, null)) +
+            targets.map { Piece(it, buildLink(origin, it)) },
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Çizim: zemin katmanı
+// ---------------------------------------------------------------------------
+
+/** Yumuşak kenarlı, dikey olarak ezilmiş disk. Blur kullanmadan temas gölgesi verir. */
+private fun DrawScope.softDisc(
+    center: Offset,
+    radius: Float,
+    color: Color,
+    alpha: Float,
+    solidUntil: Float,
+) {
+    if (alpha <= 0f) return
+    val brush = Brush.radialGradient(
+        0f to color.copy(alpha = alpha),
+        solidUntil to color.copy(alpha = alpha),
+        1f to color.copy(alpha = 0f),
+        center = center,
+        radius = radius,
+    )
+    withTransform({ scale(1f, ViewSquash, pivot = center) }) {
+        drawCircle(brush = brush, radius = radius, center = center)
+    }
+}
+
+/** Taşın hemen dibindeki gölge. Platform havada durmaz, zemine oturur. */
+private fun DrawScope.drawContactShadow(stone: Stone, rise: Float) {
+    if (rise <= 0f) return
+    val c = stone.node.center
+    val r = stone.rx
+
+    // geniş ve çok hafif
+    softDisc(
+        center = c + Offset(r * 0.035f, r * 0.05f),
+        radius = r * 1.16f,
+        color = ShadowTone,
+        alpha = 0.10f * rise,
+        solidUntil = 0.80f,
+    )
+    // dar ve daha koyu: taşın dibindeki temas gölgesi
+    softDisc(
+        center = c + Offset(r * 0.015f, r * 0.022f),
+        radius = r * 1.045f,
+        color = ShadowTone,
+        alpha = 0.22f * rise,
+        solidUntil = 0.90f,
+    )
+}
+
+/** Zemine oyulmuş ince bağlantı: koyu çizgi + altında çok hafif ışık. */
+private fun DrawScope.drawLink(link: Link, ms: Float) {
+    val progress = ease(phase(ms, link.lineStartMs, Timing.LineMs))
+    if (progress <= 0f) return
+
+    val end = lerp(link.lineStart, link.lineEnd, progress)
+    val width = 1.4.dp.toPx()
+    val lift = Offset(0f, 0.9.dp.toPx())
+
     drawLine(
-      color = ConnectionColor.copy(
-        alpha = 0.85f
-      ),
-      start = lineStart,
-      end = animatedEnd,
-      strokeWidth = 3f
+        color = GrooveLight,
+        start = link.lineStart + lift,
+        end = end + lift,
+        strokeWidth = width,
+        cap = StrokeCap.Round,
     )
-  }
-
-  return Math.toDegrees(
-    atan2(
-      (lineEnd.y - to.center.y).toDouble(),
-      (lineEnd.x - to.center.x).toDouble()
+    drawLine(
+        color = GrooveDark,
+        start = link.lineStart,
+        end = end,
+        strokeWidth = width,
+        cap = StrokeCap.Round,
     )
-  ).toFloat()
 }
 
-private fun DrawScope.drawStonePlatform(
-  node: OriginNode,
-  startAngle: Float,
-  progress: Float,
-  widthScale: Float = 1f
+// ---------------------------------------------------------------------------
+// Çizim: taş
+// ---------------------------------------------------------------------------
+
+/**
+ * Tek kademe: gerçek yan yüzey + pah (bevel) halkası + üst yüzey.
+ *
+ * Yan yüzey tek bir kapalı Path'tir:
+ *   üst elipsin sağ noktası → aşağı → alt elipsin ön yarısı → yukarı →
+ *   üst elipsin ön yarısı (geri) → kapat.
+ */
+private fun DrawScope.drawTier(
+    base: Offset,
+    rx: Float,
+    ry: Float,
+    height: Float,
+    bevel: Float,
+    alpha: Float,
 ) {
-  if (progress <= 0f) return
+    val top = Offset(base.x, base.y - height)
 
-  /*
-   * Platform ekrana "pat" diye gelmiyor.
-   * Zeminden birkaç santim yükseliyormuş gibi.
-   */
-  val easedProgress = FastOutSlowInEasing.transform(
-    progress.coerceIn(0f, 1f)
-  )
+    val side = Path().apply {
+        moveTo(base.x + rx, top.y)
+        lineTo(base.x + rx, base.y)
+        arcTo(Rect(base.x - rx, base.y - ry, base.x + rx, base.y + ry), 0f, 180f, false)
+        lineTo(base.x - rx, top.y)
+        arcTo(Rect(top.x - rx, top.y - ry, top.x + rx, top.y + ry), 180f, -180f, false)
+        close()
+    }
 
-  val radiusX = node.radius * widthScale
-  val radiusY = node.radius * 0.72f
-
-  val currentRadiusX =
-    radiusX * (0.88f + 0.12f * easedProgress)
-
-  val currentRadiusY =
-    radiusY * (0.88f + 0.12f * easedProgress)
-
-  /*
-   * Kaidenin yüksekliği bilerek çok az.
-   * Uzun sütun değil.
-   */
-  val height = 14f * easedProgress
-
-  val center = Offset(
-    x = node.center.x,
-    y = node.center.y - height * 0.35f
-  )
-
-  val platformSize = Size(
-    width = currentRadiusX * 2f,
-    height = currentRadiusY * 2f
-  )
-
-  val topLeft = Offset(
-    x = center.x - currentRadiusX,
-    y = center.y - currentRadiusY
-  )
-
-  /*
-   * YER GÖLGESİ
-   *
-   * Beyaz zemin + beyaz taş ayrımının ana parçalarından biri.
-   */
-  drawOval(
-    color = GroundShadow.copy(
-      alpha = 0.13f * easedProgress
-    ),
-    topLeft = Offset(
-      x = center.x - currentRadiusX * 0.91f,
-      y = center.y +
-        currentRadiusY +
-        height +
-        5f
-    ),
-    size = Size(
-      width = currentRadiusX * 1.82f,
-      height = 17f
+    // Yan yüzey: soldan sağa ton farkı (ışık sol üstten).
+    drawPath(
+        path = side,
+        brush = Brush.horizontalGradient(
+            0f to SideLit,
+            0.45f to SideMid,
+            1f to SideShade,
+            startX = base.x - rx,
+            endX = base.x + rx,
+        ),
+        alpha = alpha,
     )
-  )
-
-  /*
-   * ALT BASAMAK / TAŞ GÖVDESİ
-   */
-  drawOval(
-    color = StoneSideDark.copy(
-      alpha = easedProgress
-    ),
-    topLeft = Offset(
-      x = topLeft.x + 3f,
-      y = topLeft.y + height + 4f
-    ),
-    size = Size(
-      width = platformSize.width - 6f,
-      height = platformSize.height
+    // Tabana doğru hafif kararma (zemine yakın köşe gölgesi).
+    drawPath(
+        path = side,
+        brush = Brush.verticalGradient(
+            0f to Color.Transparent,
+            0.55f to Color.Transparent,
+            1f to SideOcclusion,
+            startY = top.y,
+            endY = base.y + ry,
+        ),
+        alpha = alpha,
     )
-  )
 
-  /*
-   * İKİNCİ, DAHA AÇIK KATMAN.
-   *
-   * Bu iki katman sayesinde kaide birkaç basamak
-   * yüksekliğinde okunuyor.
-   */
-  drawOval(
-    color = StoneSide.copy(
-      alpha = easedProgress
-    ),
-    topLeft = Offset(
-      x = topLeft.x + 1.5f,
-      y = topLeft.y + height
-    ),
-    size = Size(
-      width = platformSize.width - 3f,
-      height = platformSize.height
+    // Pah halkası: kenarın yuvarlatılmış olduğunu hissettirir.
+    drawOval(
+        brush = Brush.linearGradient(
+            colors = listOf(BevelLight, BevelShade),
+            start = Offset(top.x - rx * 0.7f, top.y - ry * 0.9f),
+            end = Offset(top.x + rx * 0.7f, top.y + ry * 0.9f),
+        ),
+        topLeft = Offset(top.x - rx, top.y - ry),
+        size = Size(rx * 2f, ry * 2f),
+        alpha = alpha,
     )
-  )
 
-  /*
-   * TAŞIN ÜST YÜZEYİ
-   */
-  drawOval(
-    color = StoneTop.copy(
-      alpha = easedProgress
-    ),
-    topLeft = topLeft,
-    size = platformSize
-  )
+    // Üst yüzey: bir miktar içeride, çok hafif ton geçişli.
+    val innerRx = rx - bevel
+    val innerRy = innerRx * ry / rx
+    val innerTopLeft = Offset(top.x - innerRx, top.y - innerRy)
+    val innerSize = Size(innerRx * 2f, innerRy * 2f)
 
-  /*
-   * İç yüzeyde çok hafif ton farkı.
-   * Glow değil. Taşın yüzeyini dümdüz beyaz lekeden ayırıyor.
-   */
-  drawOval(
-    color = StoneInner.copy(
-      alpha = 0.42f * easedProgress
-    ),
-    topLeft = Offset(
-      x = topLeft.x + 10f,
-      y = topLeft.y + 7f
-    ),
-    size = Size(
-      width = platformSize.width - 20f,
-      height = platformSize.height - 14f
+    drawOval(
+        brush = Brush.radialGradient(
+            colors = listOf(TopLight, TopShade),
+            center = Offset(top.x - innerRx * 0.25f, top.y - innerRy * 0.3f),
+            radius = innerRx * 1.25f,
+        ),
+        topLeft = innerTopLeft,
+        size = innerSize,
+        alpha = alpha,
     )
-  )
-
-  /*
-   * SMOOTH TAŞ KENARI
-   */
-  drawOval(
-    color = StoneEdge.copy(
-      alpha = 0.95f * easedProgress
-    ),
-    topLeft = topLeft,
-    size = platformSize,
-    style = Stroke(width = 2.5f)
-  )
-
-  /*
-   * Çizginin geldiği noktadan iki yana yayılan
-   * oluşum çizgisi.
-   */
-  drawArc(
-    color = Color.White.copy(
-      alpha = progress
-    ),
-    startAngle = startAngle,
-    sweepAngle = progress * 180f,
-    useCenter = false,
-    topLeft = topLeft,
-    size = platformSize,
-    style = Stroke(width = 3.5f)
-  )
-
-  drawArc(
-    color = Color.White.copy(
-      alpha = progress
-    ),
-    startAngle = startAngle,
-    sweepAngle = progress * -180f,
-    useCenter = false,
-    topLeft = topLeft,
-    size = platformSize,
-    style = Stroke(width = 3.5f)
-  )
+    drawOval(
+        color = BevelLine,
+        topLeft = innerTopLeft,
+        size = innerSize,
+        alpha = alpha * 0.6f,
+        style = Stroke(width = 1.dp.toPx()),
+    )
 }
 
-private fun DrawScope.drawStoneText(
-  node: OriginNode,
-  textMeasurer: TextMeasurer,
-  progress: Float,
-  fontSize: Float = 19f
-) {
-  if (progress <= 0f) return
+private fun DrawScope.drawStoneBody(stone: Stone, rise: Float) {
+    if (rise <= 0f) return
 
-  /*
-   * TEK YAZI.
-   *
-   * Glow yok.
-   * İkinci kopya yok.
-   * Glitch yok.
-   * Taşa gömülme efekti yok.
-   */
-  val text = textMeasurer.measure(
-    text = node.name,
-    style = TextStyle(
-      color = TextBlue.copy(
-        alpha = progress
-      ),
-      fontSize = fontSize.sp,
-      fontWeight = FontWeight.SemiBold,
-      letterSpacing = 0.7.sp
-    )
-  )
+    val alpha = min(1f, rise * 6f)
+    val base = stone.node.center
+    val baseHeight = stone.baseHeight * rise
+    val capHeight = stone.capHeight * rise
 
-  drawText(
-    textLayoutResult = text,
-    topLeft = Offset(
-      x = node.center.x - text.size.width / 2,
-      y = node.center.y -
-        text.size.height / 2 -
-        5f
+    drawTier(
+        base = base,
+        rx = stone.rx,
+        ry = stone.ry,
+        height = baseHeight,
+        bevel = stone.rx * 0.028f,
+        alpha = alpha,
     )
-  )
+
+    // Üst kademenin alt kademe üzerindeki temas gölgesi.
+    val capBase = Offset(base.x, base.y - baseHeight)
+    softDisc(
+        center = capBase + Offset(stone.rx * 0.012f, stone.rx * 0.02f),
+        radius = stone.capRadius * 1.07f,
+        color = ShadowTone,
+        alpha = 0.16f * rise,
+        solidUntil = 0.88f,
+    )
+
+    drawTier(
+        base = capBase,
+        rx = stone.capRadius,
+        ry = stone.capRadius * ViewSquash,
+        height = capHeight,
+        bevel = stone.capRadius * 0.03f,
+        alpha = alpha,
+    )
 }
 
-private fun DrawScope.drawOriginFormation(
-  node: OriginNode,
-  progress: Float
-) {
-  if (progress <= 0f) return
+// ---------------------------------------------------------------------------
+// Çizim: dış çizgi (rim) ve yazı
+// ---------------------------------------------------------------------------
 
-  val radiusX = node.radius
-  val radiusY = node.radius * 0.72f
+private fun DrawScope.drawContour(piece: Piece, ms: Float) {
+    val stone = piece.stone
+    val link = piece.link
 
-  val height = 17f * progress
+    val path = if (link == null) {
+        // ORIGIN: 12 yönünden başlar, saat yönünde tek yönde ilerler.
+        val sweep = 360f * phase(ms, Timing.RimStart, Timing.RimMs)
+        if (sweep <= 0f) return
+        stone.silhouette(1f).outline(startDeg = -90f, backDeg = 0f, forwardDeg = sweep)
+    } else {
+        // Hedef: çizginin değdiği noktadan iki zıt yönde ilerler.
+        val trace = ease(phase(ms, link.arriveMs, Timing.TraceMs))
+        if (trace <= 0f) return
+        val half = 180f * trace
+        stone.silhouette(piece.rise(ms)).outline(
+            startDeg = link.contactAngle,
+            backDeg = half,
+            forwardDeg = half,
+        )
+    }
 
-  val center = Offset(
-    x = node.center.x,
-    y = node.center.y - height * 0.35f
-  )
-
-  val platformSize = Size(
-    width = radiusX * 2f,
-    height = radiusY * 2f
-  )
-
-  val topLeft = Offset(
-    x = center.x - radiusX,
-    y = center.y - radiusY
-  )
-
-  drawOval(
-    color = GroundShadow.copy(
-      alpha = 0.15f * progress
-    ),
-    topLeft = Offset(
-      x = center.x - radiusX * 0.91f,
-      y = center.y + radiusY + height + 6f
-    ),
-    size = Size(
-      width = radiusX * 1.82f,
-      height = 19f
+    drawPath(
+        path = path,
+        color = Ink,
+        style = Stroke(
+            width = 0.9.dp.toPx(),
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        ),
     )
-  )
-
-  drawOval(
-    color = StoneSideDark.copy(
-      alpha = progress
-    ),
-    topLeft = Offset(
-      x = topLeft.x + 4f,
-      y = topLeft.y + height + 4f
-    ),
-    size = Size(
-      width = platformSize.width - 8f,
-      height = platformSize.height
-    )
-  )
-
-  drawOval(
-    color = StoneSide.copy(
-      alpha = progress
-    ),
-    topLeft = Offset(
-      x = topLeft.x + 2f,
-      y = topLeft.y + height
-    ),
-    size = Size(
-      width = platformSize.width - 4f,
-      height = platformSize.height
-    )
-  )
-
-  drawOval(
-    color = StoneTop.copy(
-      alpha = progress
-    ),
-    topLeft = topLeft,
-    size = platformSize
-  )
-
-  drawOval(
-    color = StoneInner.copy(
-      alpha = 0.42f * progress
-    ),
-    topLeft = Offset(
-      x = topLeft.x + 13f,
-      y = topLeft.y + 9f
-    ),
-    size = Size(
-      width = platformSize.width - 26f,
-      height = platformSize.height - 18f
-    )
-  )
-
-  /*
-   * ORIGIN'İN ÇEVRESİNİ ÇİZEN TEK ÇİZGİ.
-   *
-   * -90 dereceden başlıyor ve saat yönünde ilerliyor.
-   * Bağlantıların zamanlamasını da bu çizimin konumu belirliyor.
-   */
-  drawArc(
-    color = StoneEdge,
-    startAngle = -90f,
-    sweepAngle = progress * 360f,
-    useCenter = false,
-    topLeft = topLeft,
-    size = platformSize,
-    style = Stroke(width = 3.5f)
-  )
 }
 
+/**
+ * Taşa oyulmuş yazı (letterpress / engraved).
+ *
+ * Oyuğun sol-üst duvarı gölgede, sağ-alt duvarı ışık alır. Bunu üç geçişle veriyoruz:
+ *   1) sağ-altta ince beyaz ışık dudağı
+ *   2) koyu kobalt gövde (oyuğun gölgeli iç duvarı)
+ *   3) ana kobalt, sol-üstten çok az kaydırılmış: koyu kenar sadece sol-üstte kalır
+ * Glow, aura ve blur yok.
+ */
+private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
+    val alpha = piece.labelAlpha(ms)
+    if (alpha <= 0f) return
+
+    val stone = piece.stone
+    val size = stone.label.size
+    val topLeft = Offset(
+        x = stone.labelCenter.x - size.width / 2f,
+        y = stone.labelCenter.y - size.height / 2f,
+    )
+    val lip = Offset(0.7.dp.toPx(), 0.9.dp.toPx())
+    val wall = Offset(0.35.dp.toPx(), 0.45.dp.toPx())
+
+    drawText(
+        textLayoutResult = stone.label,
+        color = EngraveLip.copy(alpha = alpha),
+        topLeft = topLeft + lip,
+    )
+    drawText(
+        textLayoutResult = stone.label,
+        color = CobaltDeep.copy(alpha = alpha),
+        topLeft = topLeft,
+    )
+    drawText(
+        textLayoutResult = stone.label,
+        color = Cobalt.copy(alpha = alpha),
+        topLeft = topLeft + wall,
+    )
+}
+
+private fun DrawScope.drawScene(scene: Scene, ms: Float) {
+    // 1) Zemin: gölgeler, sonra zemine oyulmuş bağlantılar
+    scene.drawOrder.forEach { drawContactShadow(it.stone, it.rise(ms)) }
+    scene.links.forEach { drawLink(it, ms) }
+
+    // 2) Taşlar (bağlantıların üstünde; çizgi taşın arkasından çıkar)
+    scene.drawOrder.forEach { drawStoneBody(it.stone, it.rise(ms)) }
+
+    // 3) Dış çizgiler
+    scene.drawOrder.forEach { drawContour(it, ms) }
+
+    // 4) Yazılar
+    scene.drawOrder.forEach { drawLabel(it, ms) }
+}
+
+// ---------------------------------------------------------------------------
+// Compose
+// ---------------------------------------------------------------------------
+
+/** Animasyonu başlatan uygulama girişi. */
 @Composable
 fun OriginApp() {
-
-  val introStarted = remember {
-    mutableStateOf(false)
-  }
-
-  val textMeasurer = rememberTextMeasurer()
-
-  /*
-   * Tek intro saati.
-   *
-   * Toplam yaklaşık 5.5 saniye.
-   */
-  val introProgress = animateFloatAsState(
-    targetValue = if (introStarted.value) {
-      1f
-    } else {
-      0f
-    },
-    animationSpec = tween(
-      durationMillis = 5500,
-      easing = LinearEasing
-    )
-  )
-
-  LaunchedEffect(Unit) {
-    delay(150)
-    introStarted.value = true
-  }
-
-  val master = introProgress.value
-
-  /*
-   * İlk iş ORIGIN.
-   */
-  val originFormation = segmentProgress(
-    master,
-    0.00f,
-    0.34f
-  )
-
-  val originText = segmentProgress(
-    master,
-    0.08f,
-    0.27f
-  )
-
-  /*
-   * ORIGIN çemberi yukarıdan başlayıp saat yönünde dönüyor.
-   *
-   * Sağ üst  -> YAŞAM
-   * Sağ alt  -> FİZİK
-   * Sol alt  -> MATEMATİK
-   * Sol üst  -> EVREN
-   *
-   * O yüzden bağlantılar da bu sırayla doğuyor.
-   */
-  val lifeLine = segmentProgress(
-    originFormation,
-    0.10f,
-    0.72f
-  )
-
-  val physicsLine = segmentProgress(
-    originFormation,
-    0.34f,
-    0.96f
-  )
-
-  val mathLine = segmentProgress(
-    originFormation,
-    0.58f,
-    1.00f
-  )
-
-  val universeLine = segmentProgress(
-    originFormation,
-    0.82f,
-    1.00f
-  )
-
-  /*
-   * Dış platformlar çizgi hedefe yaklaştıkça oluşuyor.
-   */
-  val lifePlatform = segmentProgress(
-    master,
-    0.25f,
-    0.48f
-  )
-
-  val physicsPlatform = segmentProgress(
-    master,
-    0.39f,
-    0.62f
-  )
-
-  val mathPlatform = segmentProgress(
-    master,
-    0.53f,
-    0.76f
-  )
-
-  val universePlatform = segmentProgress(
-    master,
-    0.67f,
-    0.90f
-  )
-
-  val lifeText = segmentProgress(
-    master,
-    0.41f,
-    0.53f
-  )
-
-  val physicsText = segmentProgress(
-    master,
-    0.55f,
-    0.67f
-  )
-
-  val mathText = segmentProgress(
-    master,
-    0.69f,
-    0.81f
-  )
-
-  val universeText = segmentProgress(
-    master,
-    0.83f,
-    0.95f
-  )
-
-  MaterialTheme {
-    Surface(
-      modifier = Modifier.fillMaxSize(),
-      color = Background
-    ) {
-      Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.fillMaxSize()
-      ) {
-        Canvas(
-          modifier = Modifier.fillMaxSize()
+    MaterialTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Paper,
         ) {
-
-          val origin = OriginNode(
-            name = "ORIGIN",
-            center = Offset(
-              x = size.width / 2,
-              y = size.height / 2
-            ),
-            radius = 180f
-          )
-
-          val life = OriginNode(
-            name = "YAŞAM",
-            center = Offset(
-              x = size.width / 2 + 450f,
-              y = size.height / 2 - 330f
-            ),
-            radius = 105f
-          )
-
-          val universe = OriginNode(
-            name = "EVREN",
-            center = Offset(
-              x = size.width / 2 - 450f,
-              y = size.height / 2 - 330f
-            ),
-            radius = 105f
-          )
-
-          /*
-           * MATEMATİK için merkez aynı,
-           * fakat taş biraz daha geniş çizilecek.
-           */
-          val math = OriginNode(
-            name = "MATEMATİK",
-            center = Offset(
-              x = size.width / 2 - 450f,
-              y = size.height / 2 + 330f
-            ),
-            radius = 105f
-          )
-
-          val physics = OriginNode(
-            name = "FİZİK",
-            center = Offset(
-              x = size.width / 2 + 450f,
-              y = size.height / 2 + 330f
-            ),
-            radius = 105f
-          )
-
-          /*
-           * BAĞLANTILAR
-           *
-           * Her biri ORIGIN çevresindeki çizim kendi
-           * bağlantı noktasına ulaştığında doğuyor.
-           */
-          val lifeStartAngle = drawConnection(
-            from = origin,
-            to = life,
-            progress = lifeLine
-          )
-
-          val physicsStartAngle = drawConnection(
-            from = origin,
-            to = physics,
-            progress = physicsLine
-          )
-
-          val mathStartAngle = drawConnection(
-            from = origin,
-            to = math,
-            progress = mathLine
-          )
-
-          val universeStartAngle = drawConnection(
-            from = origin,
-            to = universe,
-            progress = universeLine
-          )
-
-          /*
-           * DIŞ TAŞ KAİDELER
-           */
-          drawStonePlatform(
-            node = life,
-            startAngle = lifeStartAngle,
-            progress = lifePlatform
-          )
-
-          drawStonePlatform(
-            node = physics,
-            startAngle = physicsStartAngle,
-            progress = physicsPlatform
-          )
-
-          drawStonePlatform(
-            node = math,
-            startAngle = mathStartAngle,
-            progress = mathPlatform,
-            widthScale = 1.22f
-          )
-
-          drawStonePlatform(
-            node = universe,
-            startAngle = universeStartAngle,
-            progress = universePlatform
-          )
-
-          /*
-           * MERKEZ TAŞ
-           */
-          drawOriginFormation(
-            node = origin,
-            progress = originFormation
-          )
-
-          /*
-           * DIŞ YAZILAR
-           */
-          drawStoneText(
-            node = life,
-            textMeasurer = textMeasurer,
-            progress = lifeText
-          )
-
-          drawStoneText(
-            node = physics,
-            textMeasurer = textMeasurer,
-            progress = physicsText
-          )
-
-          drawStoneText(
-            node = math,
-            textMeasurer = textMeasurer,
-            progress = mathText,
-            fontSize = 18f
-          )
-
-          drawStoneText(
-            node = universe,
-            textMeasurer = textMeasurer,
-            progress = universeText
-          )
-
-          /*
-           * ORIGIN YAZISI
-           */
-          drawStoneText(
-            node = origin,
-            textMeasurer = textMeasurer,
-            progress = originText,
-            fontSize = 27f
-          )
+            OriginScreen()
         }
-      }
     }
-  }
 }
 
-@Preview(showBackground = true)
 @Composable
-private fun OriginAppPreview() {
-  OriginApp()
+fun OriginScreen(modifier: Modifier = Modifier) {
+    val clock = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        delay(200)
+        clock.animateTo(
+            targetValue = Timing.ClockMs,
+            animationSpec = tween(
+                durationMillis = Timing.ClockMs.toInt(),
+                easing = LinearEasing,
+            ),
+        )
+    }
+
+    // Saat sadece çizim aşamasında okunur: animasyon recomposition üretmez.
+    OriginCanvas(timeMs = { clock.value }, modifier = modifier)
+}
+
+@Composable
+fun OriginCanvas(
+    timeMs: () -> Float,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize().safeDrawingPadding()) {
+        val widthPx = constraints.maxWidth.toFloat()
+        val heightPx = constraints.maxHeight.toFloat()
+
+        val scene = remember(widthPx, heightPx, density.density, density.fontScale, measurer) {
+            buildScene(widthPx, heightPx, density, measurer)
+        }
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawScene(scene, timeMs())
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF9F9F6, widthDp = 411, heightDp = 891)
+@Composable
+private fun OriginScreenPreview() {
+    // Animasyonun bittiği son hal.
+    OriginCanvas(timeMs = { Timing.ClockMs })
 }
