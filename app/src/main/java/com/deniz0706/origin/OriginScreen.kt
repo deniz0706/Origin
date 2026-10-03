@@ -27,6 +27,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
+private val Paper = Color(0xFFF5F4F0)
+private val TopLight = Color(0xFFFEFEFC)
+
 private fun DrawScope.drawConnection(
     from: OriginNode,
     to: OriginNode,
@@ -134,7 +137,12 @@ private fun DrawScope.drawNodeText(
 private fun DrawScope.drawOriginCircle(
     node: OriginNode,
     progress: Float
-) {
+) 
+    drawCircle(
+  color = TopLight,
+  radius = node.radius,
+  center = node.center
+){
     drawArc(
       startAngle = 0f,
       sweepAngle = progress * 360f,
@@ -255,7 +263,7 @@ fun OriginApp() {
   MaterialTheme {
     Surface(
       modifier = Modifier.fillMaxSize(),
-      color = Color.Black
+      color = Paper
     ) {
       Box(
         contentAlignment = Alignment.Center,
