@@ -18,13 +18,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
@@ -68,11 +71,9 @@ import kotlin.math.sqrt
 
 private val Paper = Color(0xFFF9F9F6)
 
-private val BevelLight = Color(0xFFFFFFFF)
-private val BevelShade = Color(0xFFE7E6E1)
 private val TopLight = Color(0xFFFEFEFC)
-private val TopShade = Color(0xFFF1F0EC)
-private val BevelLine = Color(0xFFDDDCD6)
+private val TopShade = Color(0xFFF3F2EE)
+private val EdgeShade = Color(0xFFE4E3DD)
 
 private val SideLit = Color(0xFFE9E8E3)
 private val SideMid = Color(0xFFDDDCD6)
@@ -86,8 +87,10 @@ private val GrooveDark = Color(0xFFC2C1B9)
 private val GrooveLight = Color(0xFFFFFFFF)
 
 private val Cobalt = Color(0xFF2146A8)
-private val CobaltDeep = Color(0xFF142C73)
-private val EngraveLip = Color(0xFFFBFBF8)
+private val EngraveWall = Color(0xFF0E2160)
+private val EngraveLit = Color(0xFFC9D2EA)
+private val EngraveLip = Color(0xFFFFFFFF)
+private val EngraveRecess = Color(0xFFD9D8D2)
 
 // ---------------------------------------------------------------------------
 // Ölçüler
@@ -100,10 +103,10 @@ private const val ViewSquash = 0.98f
 private const val OuterLabelFill = 0.74f
 
 /** Platform yüksekliği / yarıçap: yalnızca birkaç px. */
-private const val StoneThickness = 0.04f
+private const val StoneThickness = 0.052f
 
 /** Pah genişliği / yarıçap. */
-private const val StoneBevel = 0.03f
+private const val StoneBevel = 0.055f
 
 private const val OriginScale = 1.18f
 
@@ -132,6 +135,9 @@ private object Timing {
     const val RiseMs = 700f
 
     const val TextMs = 450f
+
+    /** Platform oluştuktan sonra rim çizgisinin kaybolma süresi. */
+    const val ContourFadeMs = 600f
 }
 
 private fun phase(t: Float, start: Float, duration: Float): Float =
@@ -393,19 +399,19 @@ private fun DrawScope.drawContactShadow(stone: Stone, rise: Float) {
 
     // geniş ve çok hafif
     softDisc(
-        center = c + Offset(r * 0.02f, r * 0.035f),
-        radius = r * 1.14f,
+        center = c + Offset(r * 0.015f, r * 0.03f),
+        radius = r * 1.10f,
         color = ShadowTone,
-        alpha = 0.09f * rise,
-        solidUntil = 0.84f,
+        alpha = 0.07f * rise,
+        solidUntil = 0.86f,
     )
     // dar: taşın dibindeki temas gölgesi
     softDisc(
-        center = c + Offset(r * 0.01f, r * 0.016f),
-        radius = r * 1.04f,
+        center = c + Offset(r * 0.008f, r * 0.014f),
+        radius = r * 1.035f,
         color = ShadowTone,
-        alpha = 0.2f * rise,
-        solidUntil = 0.92f,
+        alpha = 0.17f * rise,
+        solidUntil = 0.93f,
     )
 }
 
@@ -489,40 +495,22 @@ private fun DrawScope.drawTier(
         alpha = alpha,
     )
 
-    // Pah halkası: kenarın yuvarlatılmış olduğunu hissettirir.
+    // Üst yüzey + yumuşak bevel: tek oval, tek gradient. Sert halka veya çizgi yok.
+    // Gradyanın merkezi sol-üste kayık: ışık tarafında kenar açık kalır, sağ-altta
+    // taş yavaşça kenara doğru koyulaşır.
+    val soft = (bevel / rx * 3.2f).coerceIn(0.1f, 0.3f)
     drawOval(
-        brush = Brush.linearGradient(
-            colors = listOf(BevelLight, BevelShade),
-            start = Offset(top.x - rx * 0.7f, top.y - ry * 0.9f),
-            end = Offset(top.x + rx * 0.7f, top.y + ry * 0.9f),
+        brush = Brush.radialGradient(
+            0f to TopLight,
+            (1f - soft * 1.7f) to TopLight,
+            (1f - soft * 0.6f) to TopShade,
+            1f to EdgeShade,
+            center = Offset(top.x - rx * 0.1f, top.y - ry * 0.1f),
+            radius = rx * 1.1f,
         ),
         topLeft = Offset(top.x - rx, top.y - ry),
         size = Size(rx * 2f, ry * 2f),
         alpha = alpha,
-    )
-
-    // Üst yüzey: bir miktar içeride, çok hafif ton geçişli.
-    val innerRx = rx - bevel
-    val innerRy = innerRx * ry / rx
-    val innerTopLeft = Offset(top.x - innerRx, top.y - innerRy)
-    val innerSize = Size(innerRx * 2f, innerRy * 2f)
-
-    drawOval(
-        brush = Brush.radialGradient(
-            colors = listOf(TopLight, TopShade),
-            center = Offset(top.x - innerRx * 0.25f, top.y - innerRy * 0.3f),
-            radius = innerRx * 1.25f,
-        ),
-        topLeft = innerTopLeft,
-        size = innerSize,
-        alpha = alpha,
-    )
-    drawOval(
-        color = BevelLine,
-        topLeft = innerTopLeft,
-        size = innerSize,
-        alpha = alpha * 0.6f,
-        style = Stroke(width = 1.dp.toPx()),
     )
 }
 
@@ -547,26 +535,36 @@ private fun DrawScope.drawContour(piece: Piece, ms: Float) {
     val stone = piece.stone
     val link = piece.link
 
-    val path = if (link == null) {
+    val path: Path
+    val visibility: Float
+    if (link == null) {
         // ORIGIN: 12 yönünden başlar, saat yönünde tek yönde ilerler.
         val sweep = 360f * phase(ms, Timing.RimStart, Timing.RimMs)
         if (sweep <= 0f) return
-        stone.silhouette(1f).outline(startDeg = -90f, backDeg = 0f, forwardDeg = sweep)
+        path = stone.silhouette(1f).outline(startDeg = -90f, backDeg = 0f, forwardDeg = sweep)
+        // Rim tamamlanınca çizgi geri çekilir.
+        visibility = 1f - ease(phase(ms, Timing.RimStart + Timing.RimMs, Timing.ContourFadeMs))
     } else {
         // Hedef: çizginin değdiği noktadan iki zıt yönde ilerler.
         val trace = ease(phase(ms, link.arriveMs, Timing.TraceMs))
         if (trace <= 0f) return
         val half = 180f * trace
-        stone.silhouette(piece.rise(ms)).outline(
+        path = stone.silhouette(piece.rise(ms)).outline(
             startDeg = link.contactAngle,
             backDeg = half,
             forwardDeg = half,
         )
+        // Taş yükselirken çizgi geri çekilir; final ekranda keskin çember kalmaz.
+        visibility = 1f - ease(
+            phase(ms, link.riseStartMs + Timing.RiseMs * 0.4f, Timing.ContourFadeMs),
+        )
     }
+    if (visibility <= 0.01f) return
 
     drawPath(
         path = path,
         color = Ink,
+        alpha = visibility,
         style = Stroke(
             width = 0.9.dp.toPx(),
             cap = StrokeCap.Round,
@@ -576,9 +574,14 @@ private fun DrawScope.drawContour(piece: Piece, ms: Float) {
 }
 
 /**
- * Taşa oyulmuş yazı. Tek gövde + yarım pikselik iki ince kenar:
- * sol-üstte oyuğun gölgeli iç duvarı, sağ-altta taş tonunda ışık dudağı.
- * Glow, blur ve belirgin kopya yok.
+ * Taşa oyulmuş yazı.
+ *
+ * Ana kobalt gövde tek ve kaydırılmamış çizilir. Oyuk hissi harfin kendi
+ * kenarından gelir:
+ *   - dış kenarda çok ince, taş tonunda bir oyuk dudağı ve sağ-altta açık highlight
+ *   - harfin İÇİNDE (saveLayer + SrcAtop ile harfe kırpılmış) sol-üstte ince koyu
+ *     iç duvar, sağ-altta ışık alan ince açık duvar
+ * Offsetler bir pikselden küçüktür; blur, glow ve ikinci yazı yoktur.
  */
 private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
     val alpha = piece.labelAlpha(ms)
@@ -590,24 +593,57 @@ private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
         x = stone.labelCenter.x - size.width / 2f,
         y = stone.labelCenter.y - size.height / 2f,
     )
-    val lip = Offset(0.45.dp.toPx(), 0.6.dp.toPx())
-    val wall = Offset(0.3.dp.toPx(), 0.38.dp.toPx())
+    val px = 1.dp.toPx()
 
+    // Dış: oyuk dudağı (sadece harf kenarı boyunca ince çizgi).
     drawText(
         textLayoutResult = stone.label,
-        color = EngraveLip.copy(alpha = alpha),
-        topLeft = topLeft + lip,
-    )
-    drawText(
-        textLayoutResult = stone.label,
-        color = CobaltDeep.copy(alpha = alpha),
+        color = EngraveRecess.copy(alpha = 0.55f * alpha),
         topLeft = topLeft,
+        drawStyle = Stroke(width = 1.5f * px),
     )
     drawText(
         textLayoutResult = stone.label,
-        color = Cobalt.copy(alpha = alpha),
-        topLeft = topLeft + wall,
+        color = EngraveLip.copy(alpha = 0.9f * alpha),
+        topLeft = topLeft + Offset(0.3f * px, 0.45f * px),
+        drawStyle = Stroke(width = 1.1f * px),
     )
+
+    // İç: gövde + harfe kırpılmış iç duvarlar.
+    val pad = 4f * px
+    val bounds = Rect(
+        topLeft.x - pad,
+        topLeft.y - pad,
+        topLeft.x + size.width + pad,
+        topLeft.y + size.height + pad,
+    )
+    drawIntoCanvas { canvas ->
+        canvas.saveLayer(bounds, Paint().also { it.alpha = alpha })
+
+        drawText(
+            textLayoutResult = stone.label,
+            color = Cobalt,
+            topLeft = topLeft,
+        )
+        // Sol-üst iç duvar: gölgede.
+        drawText(
+            textLayoutResult = stone.label,
+            color = EngraveWall.copy(alpha = 0.85f),
+            topLeft = topLeft + Offset(0.6f * px, 0.7f * px),
+            drawStyle = Stroke(width = 1.1f * px),
+            blendMode = BlendMode.SrcAtop,
+        )
+        // Sağ-alt iç duvar: ışık alır.
+        drawText(
+            textLayoutResult = stone.label,
+            color = EngraveLit.copy(alpha = 0.6f),
+            topLeft = topLeft - Offset(0.6f * px, 0.7f * px),
+            drawStyle = Stroke(width = 1.0f * px),
+            blendMode = BlendMode.SrcAtop,
+        )
+
+        canvas.restore()
+    }
 }
 
 private fun DrawScope.drawScene(scene: Scene, ms: Float) {
