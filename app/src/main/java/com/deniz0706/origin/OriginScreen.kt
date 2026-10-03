@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -651,9 +652,9 @@ private fun DrawScope.drawScene(scene: Scene, ms: Float) {
 
 @Composable
 fun OriginApp() {
-    var intro by remember { mutableStateOf(true) }
-    var selected by remember { mutableStateOf<String?>(null) }
-    var query by remember { mutableStateOf("") }
+    var intro by rememberSaveable { mutableStateOf(true) }
+    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(Unit) { delay(6250); intro = false }
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = Paper) {
