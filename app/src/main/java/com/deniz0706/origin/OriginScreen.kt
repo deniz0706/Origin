@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,7 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -652,74 +650,15 @@ private fun DrawScope.drawScene(scene: Scene, ms: Float) {
 
 @Composable
 fun OriginApp() {
-    var intro by rememberSaveable { mutableStateOf(true) }
-    var selected by rememberSaveable { mutableStateOf<String?>(null) }
-    var query by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(Unit) { delay(6250); intro = false }
     MaterialTheme {
-        Surface(Modifier.fillMaxSize(), color = Paper) {
-            if (intro) OriginScreen()
-            else if (selected == null) FinaleHome(query=query,onQuery={query=it}) { selected = it }
-            else FinaleTopic(selected!!, onBack = { selected = null }, onNavigate = { selected = it })
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Paper
+        ) {
+            OriginScreen()
         }
     }
 }
-
-private data class FinaleContent(val title:String,val question:String,val summary:String,val why:String,val how:String,val origin:String,val apply:String,val links:List<Pair<String,String>>)
-private val finaleContent = mapOf(
-    "YAŞAM" to FinaleContent("YAŞAM","Canlı olmak ne demek?","Yaşam; enerji, bilgi ve maddenin örgütlü biçimde birlikte akmasıdır.","Canlılık tek bir özellik değildir. Metabolizma, kalıtım, homeostazi ve evrim birlikte çalışır.","Hücre zarı sınırı kurar; DNA bilgiyi saklar; proteinler işi yapar; ATP enerji aktarımını mümkün kılar.","Erken Dünya kimyası, kendini kopyalayabilen sistemlerin seçilebileceği bir ortam yaratmış olabilir. İlk yolun ayrıntıları hâlâ araştırılıyor.","Bir hücreyi organel listesi gibi değil; enerji, bilgi ve madde akışı olarak okumayı dene.",listOf("EVREN" to "Elementlerin kökeni","FİZİK" to "Enerji","MATEMATİK" to "Popülasyon modelleri")),
-    "FİZİK" to FinaleContent("FİZİK","Evren neden hareket ediyor?","Fizik değişimin hangi kurallarla gerçekleştiğini ölçülebilir ilişkilerle anlatır.","Aynı az sayıdaki ilke düşen cisimlerden yıldızlara kadar farklı ölçeklerde tekrar ortaya çıkar.","Konumun değişimi hız, hızın değişimi ivmedir. Kuvvet, momentum ve enerji aynı değişimi farklı açılardan anlatır.","Klasik mekanik; elektromanyetizma, görelilik ve kuantum kuramıyla genişleyerek modern fiziğe dönüştü.","Formülü kullanmadan önce hangi niceliğin neden değiştiğini bir cümleyle söyle.",listOf("MATEMATİK" to "Değişimin dili","EVREN" to "Uzay-zaman","YAŞAM" to "Biyofizik")),
-    "MATEMATİK" to FinaleContent("MATEMATİK","Desenleri nasıl kesinleştiririz?","Matematik yapı, miktar, uzay ve değişim arasındaki ilişkileri soyutlayıp kesinleştirir.","Soyutlama aynı yapıyı yüzlerce farklı problemde yeniden kullanmamızı sağlar.","Tanımlar nesneleri sınırlar; aksiyomlar başlangıcı verir; mantık bunlardan zorunlu sonuçlar üretir.","Sayma ve ölçmeden doğan fikirler geometri, cebir, analiz ve modern soyut yapılara genişledi.","Bir soruda sayıları silip geriye kalan ilişkiyi görmeye çalış. Kısa yol çoğu zaman oradadır.",listOf("FİZİK" to "Modelleme","EVREN" to "Kozmoloji","YAŞAM" to "Biyometri")),
-    "EVREN" to FinaleContent("EVREN","Buraya nasıl geldik?","Evren uzay-zamanın, madde ve enerjinin yaklaşık 13,8 milyar yıllık ortak tarihidir.","Kozmoloji bugün gördüğümüz yapıların başlangıç koşullarından nasıl büyüdüğünü anlamaya çalışır.","Genişleyen evrende madde soğudu; atomlar, yıldızlar ve galaksiler oluştu. Yıldızlar ağır elementleri üretti.","Büyük Patlama uzayın boşluğa patlamasını değil, uzayın ölçeğinin zamanla değişmesini tarif eder.","Uzağa bakmak geçmişe bakmaktır; ışığın sonlu hızı teleskopları zaman pencerelerine çevirir.",listOf("FİZİK" to "Görelilik","MATEMATİK" to "Modeller","YAŞAM" to "Kozmik köken"))
-)
-
-@Composable private fun FinaleHome(query:String,onQuery:(String)->Unit,onSelect:(String)->Unit) {
-    Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
-        Text("ORIGIN",fontSize=24.sp,fontWeight=FontWeight.SemiBold,color=Cobalt,letterSpacing=.12.em)
-        Text("Her şey birbirine bağlı.",fontSize=13.sp,color=Color(0xFF74736D))
-        Spacer(Modifier.height(30.dp))
-        Text("Buraya nasıl geldik?",fontSize=32.sp,fontWeight=FontWeight.Medium,color=Color(0xFF22221F))
-        Text("Ezberden değil, bağlantılardan ilerle.",fontSize=14.sp,color=Color(0xFF74736D),modifier=Modifier.padding(top=8.dp))
-        Spacer(Modifier.height(20.dp))
-        OutlinedTextField(value=query,onValueChange=onQuery,modifier=Modifier.fillMaxWidth(),singleLine=true,placeholder={Text("Kavram ara…")},shape=RoundedCornerShape(20.dp))
-        Spacer(Modifier.height(18.dp))
-        val visibleNames=listOf("YAŞAM","FİZİK","MATEMATİK","EVREN").filter { name ->
-            val item=finaleContent[name]
-            query.isBlank() || name.contains(query,true) || item?.question?.contains(query,true)==true || item?.summary?.contains(query,true)==true
-        }
-        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-            visibleNames.forEachIndexed { index,name ->
-                Surface(Modifier.fillMaxWidth().weight(1f).clickable{onSelect(name)},shape=RoundedCornerShape(28.dp),color=TopLight,shadowElevation=2.dp) {
-                    Row(Modifier.fillMaxSize().padding(22.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Text("0"+(index+1),fontSize=12.sp,color=Cobalt,fontWeight=FontWeight.Bold)
-                        Spacer(Modifier.width(18.dp))
-                        Column { Text(name,fontSize=22.sp,fontWeight=FontWeight.SemiBold,color=Cobalt);Text(finaleContent[name]?.question.orEmpty(),fontSize=13.sp,color=Color(0xFF74736D)) }
-                    }
-                }
-            }
-        }
-        Text("ANLA  ·  BAĞLA  ·  UYGULA",Modifier.fillMaxWidth().padding(top=20.dp),textAlign=TextAlign.Center,fontSize=11.sp,color=Color(0xFF74736D),letterSpacing=.12.em)
-    }
-}
-
-@Composable private fun FinaleTopic(name:String,onBack:()->Unit,onNavigate:(String)->Unit) {
-    val t=finaleContent[name] ?: return
-    BackHandler { onBack() }
-    Column(Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal=24.dp)) {
-        Text("←",Modifier.padding(top=18.dp).size(42.dp).clickable{onBack()}.wrapContentSize(),fontSize=26.sp,color=Cobalt)
-        Text(t.title,fontSize=42.sp,fontWeight=FontWeight.SemiBold,color=Cobalt,modifier=Modifier.padding(top=20.dp))
-        Text(t.question,fontSize=23.sp,fontWeight=FontWeight.Medium,color=Color(0xFF22221F),modifier=Modifier.padding(top=6.dp,bottom=18.dp))
-        Text(t.summary,fontSize=17.sp,lineHeight=26.sp,color=Color(0xFF22221F))
-        FinaleSection("NEDEN?",t.why); FinaleSection("NASIL?",t.how); FinaleSection("NEREDEN?",t.origin)
-        Text("NEYE BAĞLI?",Modifier.padding(top=30.dp,bottom=10.dp),fontSize=11.sp,color=Color(0xFF74736D),letterSpacing=.12.em)
-        t.links.forEach { (target,label) -> Surface(Modifier.fillMaxWidth().padding(bottom=9.dp).clickable{onNavigate(target)},shape=RoundedCornerShape(18.dp),color=TopLight){Row(Modifier.padding(18.dp)){Text(label,Modifier.weight(1f),color=Cobalt);Text("→",color=Cobalt)}} }
-        FinaleSection("UYGULA",t.apply)
-        Spacer(Modifier.height(30.dp))
-        Surface(shape=RoundedCornerShape(24.dp),color=Cobalt.copy(alpha=.06f)){Column(Modifier.padding(20.dp)){Text("ORIGIN NOTU",fontSize=11.sp,color=Cobalt,fontWeight=FontWeight.Bold);Spacer(Modifier.height(8.dp));Text("Bu bir son sayfa değil. Yukarıdaki bağlantılardan birine dokun ve aynı fikrin başka bir alanda nasıl göründüğünü izle.",fontSize=14.sp,lineHeight=21.sp,color=Color(0xFF22221F))}}
-        Spacer(Modifier.height(50.dp))
-    }
-}
-@Composable private fun FinaleSection(title:String,body:String){Text(title,Modifier.padding(top=30.dp,bottom=8.dp),fontSize=11.sp,color=Color(0xFF74736D),letterSpacing=.12.em);Text(body,fontSize=16.sp,lineHeight=24.sp,color=Color(0xFF22221F))}
 
 /** Animasyonu başlatan uygulama girişi. */
 @Composable
