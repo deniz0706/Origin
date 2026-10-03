@@ -653,11 +653,12 @@ private fun DrawScope.drawScene(scene: Scene, ms: Float) {
 fun OriginApp() {
     var intro by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<String?>(null) }
+    var query by remember { mutableStateOf("") }
     LaunchedEffect(Unit) { delay(6250); intro = false }
     MaterialTheme {
         Surface(Modifier.fillMaxSize(), color = Paper) {
             if (intro) OriginScreen()
-            else if (selected == null) FinaleHome { selected = it }
+            else if (selected == null) FinaleHome(query=query,onQuery={query=it}) { selected = it }
             else FinaleTopic(selected!!, onBack = { selected = null }, onNavigate = { selected = it })
         }
     }
@@ -671,16 +672,22 @@ private val finaleContent = mapOf(
     "EVREN" to FinaleContent("EVREN","Buraya nasıl geldik?","Evren uzay-zamanın, madde ve enerjinin yaklaşık 13,8 milyar yıllık ortak tarihidir.","Kozmoloji bugün gördüğümüz yapıların başlangıç koşullarından nasıl büyüdüğünü anlamaya çalışır.","Genişleyen evrende madde soğudu; atomlar, yıldızlar ve galaksiler oluştu. Yıldızlar ağır elementleri üretti.","Büyük Patlama uzayın boşluğa patlamasını değil, uzayın ölçeğinin zamanla değişmesini tarif eder.","Uzağa bakmak geçmişe bakmaktır; ışığın sonlu hızı teleskopları zaman pencerelerine çevirir.",listOf("FİZİK" to "Görelilik","MATEMATİK" to "Modeller","YAŞAM" to "Kozmik köken"))
 )
 
-@Composable private fun FinaleHome(onSelect:(String)->Unit) {
+@Composable private fun FinaleHome(query:String,onQuery:(String)->Unit,onSelect:(String)->Unit) {
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
         Text("ORIGIN",fontSize=24.sp,fontWeight=FontWeight.SemiBold,color=Cobalt,letterSpacing=.12.em)
         Text("Her şey birbirine bağlı.",fontSize=13.sp,color=Color(0xFF74736D))
         Spacer(Modifier.height(30.dp))
         Text("Buraya nasıl geldik?",fontSize=32.sp,fontWeight=FontWeight.Medium,color=Color(0xFF22221F))
         Text("Ezberden değil, bağlantılardan ilerle.",fontSize=14.sp,color=Color(0xFF74736D),modifier=Modifier.padding(top=8.dp))
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(20.dp))
+        OutlinedTextField(value=query,onValueChange=onQuery,modifier=Modifier.fillMaxWidth(),singleLine=true,placeholder={Text("Kavram ara…")},shape=RoundedCornerShape(20.dp))
+        Spacer(Modifier.height(18.dp))
+        val visibleNames=listOf("YAŞAM","FİZİK","MATEMATİK","EVREN").filter { name ->
+            val item=finaleContent[name]
+            query.isBlank() || name.contains(query,true) || item?.question?.contains(query,true)==true || item?.summary?.contains(query,true)==true
+        }
         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-            listOf("YAŞAM","FİZİK","MATEMATİK","EVREN").forEachIndexed { index,name ->
+            visibleNames.forEachIndexed { index,name ->
                 Surface(Modifier.fillMaxWidth().weight(1f).clickable{onSelect(name)},shape=RoundedCornerShape(28.dp),color=TopLight,shadowElevation=2.dp) {
                     Row(Modifier.fillMaxSize().padding(22.dp),verticalAlignment=Alignment.CenterVertically) {
                         Text("0"+(index+1),fontSize=12.sp,color=Cobalt,fontWeight=FontWeight.Bold)
