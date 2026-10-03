@@ -290,6 +290,22 @@ fun OriginApp() {
             ),
             radius = 105f
           )
+          val math = OriginNode(
+            name = "MATEMATİK",
+            center = Offset(
+              x = size.width / 2 - 450f,
+              y = size.height / 2 + 330f
+            ),
+            radius = 105f
+          )
+          val physics = OriginNode(
+            name = "FİZİK",
+            center = Offset(
+              x = size.width / 2 + 450f,
+              y = size.height / 2 + 330f
+            ),
+            radius = 105f
+          )
 
           val lifeStartAngle = drawConnection(
             from = origin,
@@ -302,6 +318,16 @@ fun OriginApp() {
             to = universe,
             progress = lineProgress.value
           )
+          val mathStartAngle = drawConnection(
+            from = origin,
+            to = math,
+            progress = lineProgress.value
+          )
+          val physicsStartAngle = drawConnection(
+            from = origin,
+            to = physics,
+            progress = lineProgress.value
+          )
 
           drawNodeCircle(
             node = life,
@@ -312,6 +338,18 @@ fun OriginApp() {
           drawNodeCircle(
             node = universe,
             startAngle = universeStartAngle,
+            progress = nodeCircleProgress.value
+          )
+
+          drawNodeCircle(
+            node = math,
+            startAngle = mathStartAngle,
+            progress = nodeCircleProgress.value
+          )
+
+          drawNodeCircle(
+            node = physics,
+            startAngle = physicsStartAngle,
             progress = nodeCircleProgress.value
           )
 
@@ -328,6 +366,18 @@ fun OriginApp() {
 
           drawNodeText(
             node = universe,
+            textMeasurer = textMeasurer,
+            progress = nodeTextProgress.value
+          )
+          
+          drawNodeText(
+            node = math,
+            textMeasurer = textMeasurer,
+            progress = nodeTextProgress.value
+          )
+
+          drawNodeText(
+            node = physics,
             textMeasurer = textMeasurer,
             progress = nodeTextProgress.value
           )
