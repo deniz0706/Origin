@@ -66,16 +66,16 @@ import kotlin.math.sqrt
 // Palet
 // ---------------------------------------------------------------------------
 
-private val Paper = Color(0xFFF9F9F6)
+private val Paper = Color(0xFFF5F4F0)
 
 private val TopLight = Color(0xFFFEFEFC)
-private val TopShade = Color(0xFFF3F2EE)
+private val TopShade = Color(0xFFF4F3EF)
 private val EdgeShade = Color(0xFFE4E3DD)
 
-private val SideLit = Color(0xFFE9E8E3)
-private val SideMid = Color(0xFFDDDCD6)
-private val SideShade = Color(0xFFC5C4BD)
-private val SideOcclusion = Color(0x26403F38)
+private val SideLit = Color(0xFFEDECE7)
+private val SideMid = Color(0xFFE2E1DB)
+private val SideShade = Color(0xFFD6D5CE)
+private val SideOcclusion = Color(0x14403F38)
 
 private val ShadowTone = Color(0xFF55544D)
 
@@ -83,7 +83,7 @@ private val Ink = Color(0xFFB0AFA7)
 private val GrooveDark = Color(0xFFC2C1B9)
 private val GrooveLight = Color(0xFFFFFFFF)
 
-private val Cobalt = Color(0xFF2146A8)
+private val Cobalt = Color(0xFF1E3A8A)
 private val EngraveWall = Color(0xFF0E2160)
 private val EngraveLit = Color(0xFFC9D2EA)
 private val EngraveLip = Color(0xFFFFFFFF)
@@ -394,21 +394,21 @@ private fun DrawScope.drawContactShadow(stone: Stone, rise: Float) {
     val c = stone.node.center
     val r = stone.rx
 
-    // geniş ve çok hafif
+    // geniş, çok hafif, her yöne eşit yayılır
     softDisc(
-        center = c + Offset(r * 0.015f, r * 0.03f),
-        radius = r * 1.10f,
+        center = c + Offset(r * 0.004f, r * 0.012f),
+        radius = r * 1.09f,
         color = ShadowTone,
-        alpha = 0.07f * rise,
-        solidUntil = 0.86f,
+        alpha = 0.06f * rise,
+        solidUntil = 0.88f,
     )
     // dar: taşın dibindeki temas gölgesi
     softDisc(
-        center = c + Offset(r * 0.008f, r * 0.014f),
-        radius = r * 1.035f,
+        center = c + Offset(r * 0.004f, r * 0.010f),
+        radius = r * 1.03f,
         color = ShadowTone,
-        alpha = 0.17f * rise,
-        solidUntil = 0.93f,
+        alpha = 0.14f * rise,
+        solidUntil = 0.94f,
     )
 }
 
@@ -492,9 +492,13 @@ private fun DrawScope.drawTier(
         alpha = alpha,
     )
 
-    // Üst yüzey: düz, neredeyse tek ton. Yastık gibi şişmez.
+    // Üst yüzey: çok hafif doğrusal ton farkı (radyal değil, yastık gibi şişmez).
     drawOval(
-        color = TopLight,
+        brush = Brush.linearGradient(
+            colors = listOf(TopLight, TopShade),
+            start = Offset(top.x - rx, top.y - ry),
+            end = Offset(top.x + rx, top.y + ry),
+        ),
         topLeft = Offset(top.x - rx, top.y - ry),
         size = Size(rx * 2f, ry * 2f),
         alpha = alpha,
@@ -589,12 +593,10 @@ private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
         x = stone.labelCenter.x - size.width / 2f,
         y = stone.labelCenter.y - size.height / 2f,
     )
-    val px = 1.dp.toPx()
-
     drawText(
         textLayoutResult = stone.label,
         color = EngraveLip.copy(alpha = 0.95f * alpha),
-        topLeft = topLeft + Offset(0.3f * px, 0.6f * px),
+        topLeft = topLeft + Offset(0.5f, 1f),
     )
     drawText(
         textLayoutResult = stone.label,
@@ -676,7 +678,7 @@ fun OriginCanvas(
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFFF9F9F6, widthDp = 411, heightDp = 891)
+@Preview(showBackground = true, backgroundColor = 0xFFF5F4F0, widthDp = 411, heightDp = 891)
 @Composable
 private fun OriginScreenPreview() {
     // Animasyonun bittiği son hal.
