@@ -1,12 +1,8 @@
 package com.deniz0706.origin
 
-import androidx.compose.animation.core.EaseInOutCubic
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -32,17 +28,21 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import kotlin.math.max
-import kotlin.math.min
+import kotlin.math.atan2
+import kotlin.math.sqrt
 
-private val OriginBlue = Color(0xFF1677FF)
-private val OriginBlueBright = Color(0xFF67B7FF)
-private val OriginBlueDark = Color(0xFF073B73)
+private val Background = Color(0xFFF8F8F6)
 
-private val PlatformSurface = Color(0xFFF3F6F8)
-private val PlatformInner = Color(0xFFDCE4EA)
-private val PlatformSide = Color(0xFF6D7780)
-private val PlatformShadow = Color(0xFF05080D)
+private val StoneTop = Color(0xFFFCFCFA)
+private val StoneInner = Color(0xFFF4F4F1)
+private val StoneSide = Color(0xFFD8D8D3)
+private val StoneSideDark = Color(0xFFC8C8C2)
+private val StoneEdge = Color(0xFFE2E2DD)
+
+private val GroundShadow = Color(0xFF8C8C86)
+
+private val TextBlue = Color(0xFF1769AA)
+private val ConnectionColor = Color(0xFFB9B9B3)
 
 private fun segmentProgress(
   progress: Float,
@@ -55,6 +55,21 @@ private fun segmentProgress(
     .coerceIn(0f, 1f)
 }
 
+private fun DrawScope.connectionAngle(
+  from: OriginNode,
+  to: OriginNode
+): Float {
+  val dx = to.center.x - from.center.x
+  val dy = to.center.y - from.center.y
+
+  return Math.toDegrees(
+    atan2(
+      dy.toDouble(),
+      dx.toDouble()
+    )
+  ).toFloat()
+}
+
 private fun DrawScope.drawConnection(
   from: OriginNode,
   to: OriginNode,
@@ -62,385 +77,368 @@ private fun DrawScope.drawConnection(
 ): Float {
   val dx = to.center.x - from.center.x
   val dy = to.center.y - from.center.y
-  val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+
+  val distance = sqrt(
+    dx * dx + dy * dy
+  )
 
   val fromRatio = from.radius / distance
   val toRatio = to.radius / distance
 
   val lineStart = Offset(
-    x = from.center.x + (dx * fromRatio),
-    y = from.center.y + (dy * fromRatio)
+    x = from.center.x + dx * fromRatio,
+    y = from.center.y + dy * fromRatio
   )
 
   val lineEnd = Offset(
-    x = to.center.x - (dx * toRatio),
-    y = to.center.y - (dy * toRatio)
+    x = to.center.x - dx * toRatio,
+    y = to.center.y - dy * toRatio
   )
 
   val animatedEnd = Offset(
-    x = lineStart.x + ((lineEnd.x - lineStart.x) * progress),
-    y = lineStart.y + ((lineEnd.y - lineStart.y) * progress)
+    x = lineStart.x +
+      (lineEnd.x - lineStart.x) * progress,
+    y = lineStart.y +
+      (lineEnd.y - lineStart.y) * progress
   )
 
   if (progress > 0f) {
-
     drawLine(
-      color = OriginBlue.copy(
-        alpha = 0.12f * progress
-      ),
-      start = lineStart,
-      end = animatedEnd,
-      strokeWidth = 11f
-    )
-
-    drawLine(
-      color = Color.White.copy(
-        alpha = 0.82f * progress
+      color = ConnectionColor.copy(
+        alpha = 0.85f
       ),
       start = lineStart,
       end = animatedEnd,
       strokeWidth = 3f
     )
-
-    drawCircle(
-      color = OriginBlueBright.copy(
-        alpha = 0.50f * progress
-      ),
-      radius = 5f,
-      center = animatedEnd
-    )
-
-    drawCircle(
-      color = Color.White.copy(
-        alpha = 0.90f * progress
-      ),
-      radius = 2f,
-      center = animatedEnd
-    )
   }
 
   return Math.toDegrees(
-    kotlin.math.atan2(
+    atan2(
       (lineEnd.y - to.center.y).toDouble(),
       (lineEnd.x - to.center.x).toDouble()
     )
   ).toFloat()
 }
 
-private fun DrawScope.drawNodePlatform(
+private fun DrawScope.drawStonePlatform(
   node: OriginNode,
   startAngle: Float,
-  circleProgress: Float,
-  surfaceProgress: Float
+  progress: Float,
+  widthScale: Float = 1f
 ) {
-  if (circleProgress <= 0f && surfaceProgress <= 0f) return
+  if (progress <= 0f) return
 
-  val diameter = node.radius * 2f
+  /*
+   * Platform ekrana "pat" diye gelmiyor.
+   * Zeminden birkaç santim yükseliyormuş gibi.
+   */
+  val easedProgress = FastOutSlowInEasing.transform(
+    progress.coerceIn(0f, 1f)
+  )
+
+  val radiusX = node.radius * widthScale
+  val radiusY = node.radius * 0.72f
+
+  val currentRadiusX =
+    radiusX * (0.88f + 0.12f * easedProgress)
+
+  val currentRadiusY =
+    radiusY * (0.88f + 0.12f * easedProgress)
+
+  /*
+   * Kaidenin yüksekliği bilerek çok az.
+   * Uzun sütun değil.
+   */
+  val height = 14f * easedProgress
+
+  val center = Offset(
+    x = node.center.x,
+    y = node.center.y - height * 0.35f
+  )
 
   val platformSize = Size(
-    width = diameter,
-    height = diameter
+    width = currentRadiusX * 2f,
+    height = currentRadiusY * 2f
   )
 
   val topLeft = Offset(
-    x = node.center.x - node.radius,
-    y = node.center.y - node.radius
+    x = center.x - currentRadiusX,
+    y = center.y - currentRadiusY
   )
 
-  val depth = 9f
-
   /*
-   * UZAK GÖLGE
+   * YER GÖLGESİ
+   *
+   * Beyaz zemin + beyaz taş ayrımının ana parçalarından biri.
    */
   drawOval(
-    color = PlatformShadow.copy(
-      alpha = 0.48f * surfaceProgress
+    color = GroundShadow.copy(
+      alpha = 0.13f * easedProgress
     ),
     topLeft = Offset(
-      x = topLeft.x - 5f,
-      y = topLeft.y + depth + 7f
+      x = center.x - currentRadiusX * 0.91f,
+      y = center.y +
+        currentRadiusY +
+        height +
+        5f
     ),
     size = Size(
-      width = platformSize.width + 10f,
-      height = platformSize.height + 10f
+      width = currentRadiusX * 1.82f,
+      height = 17f
     )
   )
 
   /*
-   * PLATFORMUN ALT GÖVDESİ
+   * ALT BASAMAK / TAŞ GÖVDESİ
    */
   drawOval(
-    color = PlatformSide.copy(
-      alpha = surfaceProgress
+    color = StoneSideDark.copy(
+      alpha = easedProgress
     ),
     topLeft = Offset(
-      x = topLeft.x,
-      y = topLeft.y + depth
+      x = topLeft.x + 3f,
+      y = topLeft.y + height + 4f
     ),
-    size = platformSize
-  )
-
-  /*
-   * ÜST YÜZEY
-   */
-  drawOval(
-    color = PlatformSurface.copy(
-      alpha = surfaceProgress
-    ),
-    topLeft = topLeft,
-    size = platformSize
-  )
-
-  /*
-   * İÇ YÜZEY.
-   * Tamamen düz beyaz disk görünümünü kırıyor.
-   */
-  drawCircle(
-    color = PlatformInner.copy(
-      alpha = 0.35f * surfaceProgress
-    ),
-    radius = node.radius - 10f,
-    center = Offset(
-      x = node.center.x,
-      y = node.center.y + 2f
+    size = Size(
+      width = platformSize.width - 6f,
+      height = platformSize.height
     )
   )
 
   /*
-   * ÇOK HAFİF MAVİ İÇ HALKA
+   * İKİNCİ, DAHA AÇIK KATMAN.
+   *
+   * Bu iki katman sayesinde kaide birkaç basamak
+   * yüksekliğinde okunuyor.
    */
-  drawCircle(
-    color = OriginBlue.copy(
-      alpha = 0.13f * surfaceProgress
+  drawOval(
+    color = StoneSide.copy(
+      alpha = easedProgress
     ),
-    radius = node.radius - 10f,
-    center = node.center,
-    style = Stroke(width = 3f)
-  )
-
-  /*
-   * DIŞ ÇEMBER:
-   * bağlantının platforma değdiği noktadan iki yöne açılıyor.
-   */
-  drawArc(
-    color = Color.White.copy(
-      alpha = circleProgress
-    ),
-    startAngle = startAngle,
-    sweepAngle = circleProgress * 180f,
-    useCenter = false,
-    topLeft = topLeft,
-    size = platformSize,
-    style = Stroke(width = 5f)
-  )
-
-  drawArc(
-    color = Color.White.copy(
-      alpha = circleProgress
-    ),
-    startAngle = startAngle,
-    sweepAngle = circleProgress * -180f,
-    useCenter = false,
-    topLeft = topLeft,
-    size = platformSize,
-    style = Stroke(width = 5f)
-  )
-
-  /*
-   * ÜST KENARDA ÇOK HAFİF IŞIK
-   */
-  drawArc(
-    color = Color.White.copy(
-      alpha = 0.48f * surfaceProgress
-    ),
-    startAngle = 200f,
-    sweepAngle = 140f,
-    useCenter = false,
     topLeft = Offset(
-      x = topLeft.x + 5f,
-      y = topLeft.y + 5f
+      x = topLeft.x + 1.5f,
+      y = topLeft.y + height
     ),
     size = Size(
-      width = platformSize.width - 10f,
-      height = platformSize.height - 10f
+      width = platformSize.width - 3f,
+      height = platformSize.height
+    )
+  )
+
+  /*
+   * TAŞIN ÜST YÜZEYİ
+   */
+  drawOval(
+    color = StoneTop.copy(
+      alpha = easedProgress
     ),
-    style = Stroke(width = 2f)
+    topLeft = topLeft,
+    size = platformSize
+  )
+
+  /*
+   * İç yüzeyde çok hafif ton farkı.
+   * Glow değil. Taşın yüzeyini dümdüz beyaz lekeden ayırıyor.
+   */
+  drawOval(
+    color = StoneInner.copy(
+      alpha = 0.42f * easedProgress
+    ),
+    topLeft = Offset(
+      x = topLeft.x + 10f,
+      y = topLeft.y + 7f
+    ),
+    size = Size(
+      width = platformSize.width - 20f,
+      height = platformSize.height - 14f
+    )
+  )
+
+  /*
+   * SMOOTH TAŞ KENARI
+   */
+  drawOval(
+    color = StoneEdge.copy(
+      alpha = 0.95f * easedProgress
+    ),
+    topLeft = topLeft,
+    size = platformSize,
+    style = Stroke(width = 2.5f)
+  )
+
+  /*
+   * Çizginin geldiği noktadan iki yana yayılan
+   * oluşum çizgisi.
+   */
+  drawArc(
+    color = Color.White.copy(
+      alpha = progress
+    ),
+    startAngle = startAngle,
+    sweepAngle = progress * 180f,
+    useCenter = false,
+    topLeft = topLeft,
+    size = platformSize,
+    style = Stroke(width = 3.5f)
+  )
+
+  drawArc(
+    color = Color.White.copy(
+      alpha = progress
+    ),
+    startAngle = startAngle,
+    sweepAngle = progress * -180f,
+    useCenter = false,
+    topLeft = topLeft,
+    size = platformSize,
+    style = Stroke(width = 3.5f)
   )
 }
 
-private fun DrawScope.drawNodeText(
+private fun DrawScope.drawStoneText(
   node: OriginNode,
   textMeasurer: TextMeasurer,
-  progress: Float
+  progress: Float,
+  fontSize: Float = 19f
 ) {
   if (progress <= 0f) return
 
   /*
-   * YAZININ ALTINDAKİ OYUK/GÖLGE.
+   * TEK YAZI.
+   *
+   * Glow yok.
+   * İkinci kopya yok.
+   * Glitch yok.
+   * Taşa gömülme efekti yok.
    */
-  val engravedText = textMeasurer.measure(
+  val text = textMeasurer.measure(
     text = node.name,
     style = TextStyle(
-      color = OriginBlueDark.copy(
-        alpha = 0.70f * progress
-      ),
-      fontSize = 20.sp,
-      fontWeight = FontWeight.Bold,
-      letterSpacing = 1.2.sp
-    )
-  )
-
-  drawText(
-    textLayoutResult = engravedText,
-    topLeft = Offset(
-      x = node.center.x - engravedText.size.width / 2,
-      y = node.center.y - engravedText.size.height / 2 + 2.5f
-    )
-  )
-
-  /*
-   * GENİŞ, ÇOK HAFİF MAVİ IŞIK.
-   */
-  val glowText = textMeasurer.measure(
-    text = node.name,
-    style = TextStyle(
-      color = OriginBlueBright.copy(
-        alpha = 0.18f * progress
-      ),
-      fontSize = 23.sp,
-      fontWeight = FontWeight.Bold,
-      letterSpacing = 1.5.sp
-    )
-  )
-
-  drawText(
-    textLayoutResult = glowText,
-    topLeft = Offset(
-      x = node.center.x - glowText.size.width / 2,
-      y = node.center.y - glowText.size.height / 2
-    )
-  )
-
-  /*
-   * ASIL YAZI.
-   */
-  val nodeText = textMeasurer.measure(
-    text = node.name,
-    style = TextStyle(
-      color = OriginBlue.copy(
+      color = TextBlue.copy(
         alpha = progress
       ),
-      fontSize = 20.sp,
-      fontWeight = FontWeight.Bold,
-      letterSpacing = 1.2.sp
+      fontSize = fontSize.sp,
+      fontWeight = FontWeight.SemiBold,
+      letterSpacing = 0.7.sp
     )
   )
 
   drawText(
-    textLayoutResult = nodeText,
+    textLayoutResult = text,
     topLeft = Offset(
-      x = node.center.x - nodeText.size.width / 2,
-      y = node.center.y - nodeText.size.height / 2
+      x = node.center.x - text.size.width / 2,
+      y = node.center.y -
+        text.size.height / 2 -
+        5f
     )
   )
 }
 
-private fun DrawScope.drawOriginHalo(
-  node: OriginNode,
-  progress: Float,
-  pulse: Float
-) {
-  if (progress <= 0f) return
-
-  val haloAlpha = 0.05f + (pulse * 0.05f)
-
-  drawCircle(
-    color = OriginBlue.copy(
-      alpha = haloAlpha * progress
-    ),
-    radius = node.radius + 34f + (pulse * 4f),
-    center = node.center,
-    style = Stroke(width = 16f)
-  )
-
-  drawCircle(
-    color = OriginBlueBright.copy(
-      alpha = (0.12f + pulse * 0.06f) * progress
-    ),
-    radius = node.radius + 17f + (pulse * 2f),
-    center = node.center,
-    style = Stroke(width = 2f)
-  )
-}
-
-private fun DrawScope.drawOriginCircle(
+private fun DrawScope.drawOriginFormation(
   node: OriginNode,
   progress: Float
 ) {
+  if (progress <= 0f) return
+
+  val radiusX = node.radius
+  val radiusY = node.radius * 0.72f
+
+  val height = 17f * progress
+
+  val center = Offset(
+    x = node.center.x,
+    y = node.center.y - height * 0.35f
+  )
+
+  val platformSize = Size(
+    width = radiusX * 2f,
+    height = radiusY * 2f
+  )
+
+  val topLeft = Offset(
+    x = center.x - radiusX,
+    y = center.y - radiusY
+  )
+
+  drawOval(
+    color = GroundShadow.copy(
+      alpha = 0.15f * progress
+    ),
+    topLeft = Offset(
+      x = center.x - radiusX * 0.91f,
+      y = center.y + radiusY + height + 6f
+    ),
+    size = Size(
+      width = radiusX * 1.82f,
+      height = 19f
+    )
+  )
+
+  drawOval(
+    color = StoneSideDark.copy(
+      alpha = progress
+    ),
+    topLeft = Offset(
+      x = topLeft.x + 4f,
+      y = topLeft.y + height + 4f
+    ),
+    size = Size(
+      width = platformSize.width - 8f,
+      height = platformSize.height
+    )
+  )
+
+  drawOval(
+    color = StoneSide.copy(
+      alpha = progress
+    ),
+    topLeft = Offset(
+      x = topLeft.x + 2f,
+      y = topLeft.y + height
+    ),
+    size = Size(
+      width = platformSize.width - 4f,
+      height = platformSize.height
+    )
+  )
+
+  drawOval(
+    color = StoneTop.copy(
+      alpha = progress
+    ),
+    topLeft = topLeft,
+    size = platformSize
+  )
+
+  drawOval(
+    color = StoneInner.copy(
+      alpha = 0.42f * progress
+    ),
+    topLeft = Offset(
+      x = topLeft.x + 13f,
+      y = topLeft.y + 9f
+    ),
+    size = Size(
+      width = platformSize.width - 26f,
+      height = platformSize.height - 18f
+    )
+  )
+
+  /*
+   * ORIGIN'İN ÇEVRESİNİ ÇİZEN TEK ÇİZGİ.
+   *
+   * -90 dereceden başlıyor ve saat yönünde ilerliyor.
+   * Bağlantıların zamanlamasını da bu çizimin konumu belirliyor.
+   */
   drawArc(
+    color = StoneEdge,
     startAngle = -90f,
     sweepAngle = progress * 360f,
-    style = Stroke(width = 4f),
-    size = Size(
-      width = node.radius * 2,
-      height = node.radius * 2
-    ),
-    color = Color.White.copy(
-      alpha = 0.95f
-    ),
-    topLeft = Offset(
-      x = node.center.x - node.radius,
-      y = node.center.y - node.radius
-    ),
-    useCenter = false
-  )
-}
-
-private fun DrawScope.drawOriginText(
-  node: OriginNode,
-  textMeasurer: TextMeasurer,
-  progress: Float
-) {
-  val glowText = textMeasurer.measure(
-    text = node.name,
-    style = TextStyle(
-      color = OriginBlueBright.copy(
-        alpha = 0.16f * progress
-      ),
-      fontSize = 36.sp,
-      fontWeight = FontWeight.Bold,
-      letterSpacing = 2.5.sp
-    )
-  )
-
-  val originText = textMeasurer.measure(
-    text = node.name,
-    style = TextStyle(
-      color = Color.White.copy(
-        alpha = progress
-      ),
-      fontSize = 32.sp,
-      fontWeight = FontWeight.Bold,
-      letterSpacing = 2.sp
-    )
-  )
-
-  val textOffsetY = 38f * (1f - progress)
-
-  drawText(
-    textLayoutResult = glowText,
-    topLeft = Offset(
-      x = node.center.x - glowText.size.width / 2,
-      y = node.center.y - glowText.size.height / 2 + textOffsetY
-    )
-  )
-
-  drawText(
-    textLayoutResult = originText,
-    topLeft = Offset(
-      x = node.center.x - originText.size.width / 2,
-      y = node.center.y - originText.size.height / 2 + textOffsetY
-    )
+    useCenter = false,
+    topLeft = topLeft,
+    size = platformSize,
+    style = Stroke(width = 3.5f)
   )
 }
 
@@ -454,12 +452,9 @@ fun OriginApp() {
   val textMeasurer = rememberTextMeasurer()
 
   /*
-   * Tek bir ana intro değeri:
+   * Tek intro saati.
    *
-   * 0 ------------------------------------------------------ 1
-   *
-   * Bunun farklı parçalarını aşağıda farklı animasyonlara
-   * dönüştürüyoruz.
+   * Toplam yaklaşık 5.5 saniye.
    */
   val introProgress = animateFloatAsState(
     targetValue = if (introStarted.value) {
@@ -468,168 +463,122 @@ fun OriginApp() {
       0f
     },
     animationSpec = tween(
-      durationMillis = 5200,
+      durationMillis = 5500,
       easing = LinearEasing
     )
   )
 
-  /*
-   * Açılıştan sonra ORIGIN çok hafif nefes alıyor.
-   */
-  val infiniteTransition = rememberInfiniteTransition()
-
-  val originPulse = infiniteTransition.animateFloat(
-    initialValue = 0f,
-    targetValue = 1f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(
-        durationMillis = 2600,
-        easing = EaseInOutCubic
-      ),
-      repeatMode = RepeatMode.Reverse
-    )
-  )
-
   LaunchedEffect(Unit) {
-    delay(180)
+    delay(150)
     introStarted.value = true
   }
 
+  val master = introProgress.value
+
   /*
-   * INTRO ZAMAN ÇİZELGESİ
-   *
-   * 0.00 - 0.25  ORIGIN yazısı
-   * 0.16 - 0.39  ORIGIN çemberi
-   * 0.34 - 0.70  bağlantılar
-   * 0.64 - 0.84  platform çemberleri
-   * 0.70 - 0.90  platform yüzeyleri
-   * 0.82 - 1.00  node yazıları
+   * İlk iş ORIGIN.
    */
-
-  val masterProgress = introProgress.value
-
-  val originTextProgress = segmentProgress(
-    masterProgress,
+  val originFormation = segmentProgress(
+    master,
     0.00f,
-    0.25f
+    0.34f
   )
 
-  val originCircleProgress = segmentProgress(
-    masterProgress,
-    0.16f,
-    0.39f
-  )
-
-  val originHaloProgress = segmentProgress(
-    masterProgress,
-    0.28f,
-    0.46f
+  val originText = segmentProgress(
+    master,
+    0.08f,
+    0.27f
   )
 
   /*
-   * Bağlantılara küçük farklar verdim.
-   * Hepsi aynı milisaniyede fırlamıyor.
+   * ORIGIN çemberi yukarıdan başlayıp saat yönünde dönüyor.
+   *
+   * Sağ üst  -> YAŞAM
+   * Sağ alt  -> FİZİK
+   * Sol alt  -> MATEMATİK
+   * Sol üst  -> EVREN
+   *
+   * O yüzden bağlantılar da bu sırayla doğuyor.
    */
-  val lifeLineProgress = segmentProgress(
-    masterProgress,
-    0.34f,
-    0.66f
-  )
-
-  val universeLineProgress = segmentProgress(
-    masterProgress,
-    0.37f,
-    0.69f
-  )
-
-  val mathLineProgress = segmentProgress(
-    masterProgress,
-    0.40f,
+  val lifeLine = segmentProgress(
+    originFormation,
+    0.10f,
     0.72f
   )
 
-  val physicsLineProgress = segmentProgress(
-    masterProgress,
-    0.43f,
-    0.75f
+  val physicsLine = segmentProgress(
+    originFormation,
+    0.34f,
+    0.96f
   )
 
-  val lifeCircleProgress = segmentProgress(
-    masterProgress,
-    0.62f,
-    0.79f
-  )
-
-  val universeCircleProgress = segmentProgress(
-    masterProgress,
-    0.65f,
-    0.82f
-  )
-
-  val mathCircleProgress = segmentProgress(
-    masterProgress,
-    0.68f,
-    0.85f
-  )
-
-  val physicsCircleProgress = segmentProgress(
-    masterProgress,
-    0.71f,
-    0.88f
-  )
-
-  val lifeSurfaceProgress = segmentProgress(
-    masterProgress,
-    0.68f,
-    0.82f
-  )
-
-  val universeSurfaceProgress = segmentProgress(
-    masterProgress,
-    0.71f,
-    0.85f
-  )
-
-  val mathSurfaceProgress = segmentProgress(
-    masterProgress,
-    0.74f,
-    0.88f
-  )
-
-  val physicsSurfaceProgress = segmentProgress(
-    masterProgress,
-    0.77f,
-    0.91f
-  )
-
-  val lifeTextProgress = segmentProgress(
-    masterProgress,
-    0.78f,
-    0.91f
-  )
-
-  val universeTextProgress = segmentProgress(
-    masterProgress,
-    0.81f,
-    0.94f
-  )
-
-  val mathTextProgress = segmentProgress(
-    masterProgress,
-    0.84f,
-    0.97f
-  )
-
-  val physicsTextProgress = segmentProgress(
-    masterProgress,
-    0.87f,
+  val mathLine = segmentProgress(
+    originFormation,
+    0.58f,
     1.00f
+  )
+
+  val universeLine = segmentProgress(
+    originFormation,
+    0.82f,
+    1.00f
+  )
+
+  /*
+   * Dış platformlar çizgi hedefe yaklaştıkça oluşuyor.
+   */
+  val lifePlatform = segmentProgress(
+    master,
+    0.25f,
+    0.48f
+  )
+
+  val physicsPlatform = segmentProgress(
+    master,
+    0.39f,
+    0.62f
+  )
+
+  val mathPlatform = segmentProgress(
+    master,
+    0.53f,
+    0.76f
+  )
+
+  val universePlatform = segmentProgress(
+    master,
+    0.67f,
+    0.90f
+  )
+
+  val lifeText = segmentProgress(
+    master,
+    0.41f,
+    0.53f
+  )
+
+  val physicsText = segmentProgress(
+    master,
+    0.55f,
+    0.67f
+  )
+
+  val mathText = segmentProgress(
+    master,
+    0.69f,
+    0.81f
+  )
+
+  val universeText = segmentProgress(
+    master,
+    0.83f,
+    0.95f
   )
 
   MaterialTheme {
     Surface(
       modifier = Modifier.fillMaxSize(),
-      color = Color(0xFF020305)
+      color = Background
     ) {
       Box(
         contentAlignment = Alignment.Center,
@@ -638,20 +587,6 @@ fun OriginApp() {
         Canvas(
           modifier = Modifier.fillMaxSize()
         ) {
-
-          /*
-           * ÇOK HAFİF ARKA PLAN DERİNLİĞİ
-           */
-          drawCircle(
-            color = OriginBlue.copy(
-              alpha = 0.018f * originHaloProgress
-            ),
-            radius = min(size.width, size.height) * 0.48f,
-            center = Offset(
-              x = size.width / 2,
-              y = size.height / 2
-            )
-          )
 
           val origin = OriginNode(
             name = "ORIGIN",
@@ -680,6 +615,10 @@ fun OriginApp() {
             radius = 105f
           )
 
+          /*
+           * MATEMATİK için merkez aynı,
+           * fakat taş biraz daha geniş çizilecek.
+           */
           val math = OriginNode(
             name = "MATEMATİK",
             center = Offset(
@@ -699,111 +638,107 @@ fun OriginApp() {
           )
 
           /*
-           * ORIGIN HALO
-           */
-          drawOriginHalo(
-            node = origin,
-            progress = originHaloProgress,
-            pulse = originPulse.value
-          )
-
-          /*
            * BAĞLANTILAR
+           *
+           * Her biri ORIGIN çevresindeki çizim kendi
+           * bağlantı noktasına ulaştığında doğuyor.
            */
           val lifeStartAngle = drawConnection(
             from = origin,
             to = life,
-            progress = lifeLineProgress
-          )
-
-          val universeStartAngle = drawConnection(
-            from = origin,
-            to = universe,
-            progress = universeLineProgress
-          )
-
-          val mathStartAngle = drawConnection(
-            from = origin,
-            to = math,
-            progress = mathLineProgress
+            progress = lifeLine
           )
 
           val physicsStartAngle = drawConnection(
             from = origin,
             to = physics,
-            progress = physicsLineProgress
+            progress = physicsLine
+          )
+
+          val mathStartAngle = drawConnection(
+            from = origin,
+            to = math,
+            progress = mathLine
+          )
+
+          val universeStartAngle = drawConnection(
+            from = origin,
+            to = universe,
+            progress = universeLine
           )
 
           /*
-           * PLATFORMLAR
+           * DIŞ TAŞ KAİDELER
            */
-          drawNodePlatform(
+          drawStonePlatform(
             node = life,
             startAngle = lifeStartAngle,
-            circleProgress = lifeCircleProgress,
-            surfaceProgress = lifeSurfaceProgress
+            progress = lifePlatform
           )
 
-          drawNodePlatform(
-            node = universe,
-            startAngle = universeStartAngle,
-            circleProgress = universeCircleProgress,
-            surfaceProgress = universeSurfaceProgress
-          )
-
-          drawNodePlatform(
-            node = math,
-            startAngle = mathStartAngle,
-            circleProgress = mathCircleProgress,
-            surfaceProgress = mathSurfaceProgress
-          )
-
-          drawNodePlatform(
+          drawStonePlatform(
             node = physics,
             startAngle = physicsStartAngle,
-            circleProgress = physicsCircleProgress,
-            surfaceProgress = physicsSurfaceProgress
+            progress = physicsPlatform
+          )
+
+          drawStonePlatform(
+            node = math,
+            startAngle = mathStartAngle,
+            progress = mathPlatform,
+            widthScale = 1.22f
+          )
+
+          drawStonePlatform(
+            node = universe,
+            startAngle = universeStartAngle,
+            progress = universePlatform
           )
 
           /*
-           * ORIGIN
+           * MERKEZ TAŞ
            */
-          drawOriginCircle(
+          drawOriginFormation(
             node = origin,
-            progress = originCircleProgress
+            progress = originFormation
           )
 
           /*
-           * NODE YAZILARI
+           * DIŞ YAZILAR
            */
-          drawNodeText(
+          drawStoneText(
             node = life,
             textMeasurer = textMeasurer,
-            progress = lifeTextProgress
+            progress = lifeText
           )
 
-          drawNodeText(
-            node = universe,
-            textMeasurer = textMeasurer,
-            progress = universeTextProgress
-          )
-
-          drawNodeText(
-            node = math,
-            textMeasurer = textMeasurer,
-            progress = mathTextProgress
-          )
-
-          drawNodeText(
+          drawStoneText(
             node = physics,
             textMeasurer = textMeasurer,
-            progress = physicsTextProgress
+            progress = physicsText
           )
 
-          drawOriginText(
+          drawStoneText(
+            node = math,
+            textMeasurer = textMeasurer,
+            progress = mathText,
+            fontSize = 18f
+          )
+
+          drawStoneText(
+            node = universe,
+            textMeasurer = textMeasurer,
+            progress = universeText
+          )
+
+          /*
+           * ORIGIN YAZISI
+           */
+          drawStoneText(
             node = origin,
             textMeasurer = textMeasurer,
-            progress = originTextProgress
+            progress = originText,
+            fontSize = 27f
           )
         }
       }
