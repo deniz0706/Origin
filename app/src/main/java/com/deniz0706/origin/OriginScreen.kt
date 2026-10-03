@@ -51,23 +51,15 @@ import kotlin.math.sqrt
  * ORIGIN ana ekranı
  * =================
  *
- * Sahne, beyaz bir zemin üzerinde duran beş alçak taş kaideden oluşur.
+ * Neredeyse tam tepeden görülen, beyaz bir yüzey üzerinde duran beş tek parça,
+ * çok alçak taş platform. Kalınlık perspektifle değil; ince yan yüzey, bevel ve
+ * temas gölgesiyle verilir. Yazılar taşın yüzeyine oyulmuştur.
  *
- * GEOMETRİ
- *   Her kaide iki kademeli bir silindirdir (alt kademe + daha dar üst kademe).
- *   Kalınlık "üst üste oval" ile değil, gerçek bir yan yüzey Path'i ile çizilir:
- *   üst kenar elipsinin ön yarısı + iki dikey kenar + alt kenar elipsinin ön yarısı.
- *
- * ANİMASYON (nedensellik zinciri)
- *   Tek bir saat (ms) vardır. Hiçbir bağlantının zamanı elle verilmez:
- *
- *   1. ORIGIN yükselir, yazısı belirir.
- *   2. ORIGIN'in dış çizgisi (silüet) 12 yönünden saat yönünde çizilir.
- *   3. Her bağlantı noktasının rim üzerindeki AÇISAL konumu geometriden hesaplanır
- *      (zemindeki hat, silüeti hangi noktada terk ediyorsa orası).
- *      Rim o açıya ulaştığı ms'de çizgi tam o noktadan büyümeye başlar.
- *   4. Çizgi hedefe varınca hedefin dış sınırı, temas noktasından iki zıt yöne
- *      ilerleyerek tamamlanır, taş yükselir, en son yazısı belirir.
+ * Animasyon tek bir saatle (ms) yürür; bağlantı zamanları elle verilmez:
+ *   ORIGIN yükselir -> rim 12 yönünden saat yönünde çizilir -> her bağlantı
+ *   noktasının rim üzerindeki açısal konumu geometriden hesaplanır (rimTrigger)
+ *   -> rim oraya ulaşınca çizgi o noktadan büyür -> hedefe varınca hedefin sınırı
+ *   temas noktasından iki yöne tamamlanır -> platform yükselir -> yazı belirir.
  */
 
 // ---------------------------------------------------------------------------
@@ -95,22 +87,25 @@ private val GrooveLight = Color(0xFFFFFFFF)
 
 private val Cobalt = Color(0xFF2146A8)
 private val CobaltDeep = Color(0xFF142C73)
-private val EngraveLip = Color(0xFFFFFFFF)
+private val EngraveLip = Color(0xFFFBFBF8)
 
 // ---------------------------------------------------------------------------
 // Ölçüler
 // ---------------------------------------------------------------------------
 
 /** Yukarıdan bakış: dairenin dikey ölçeği. 1f = tam üstten, küçüldükçe daha oval. */
-private const val ViewSquash = 0.82f
+private const val ViewSquash = 0.98f
 
-/** Üst kademenin alt kademeye oranı. */
-private const val CapRatio = 0.88f
+/** Yazının üst yüzey çapına oranı (MATEMATİK en geniş yazı, ortak font ondan türer). */
+private const val OuterLabelFill = 0.74f
 
-/** Dış platformlarda yazının üst kademe çapına oranı (MATEMATİK en geniş yazı). */
-private const val OuterLabelFill = 0.82f
+/** Platform yüksekliği / yarıçap: yalnızca birkaç px. */
+private const val StoneThickness = 0.04f
 
-private const val OriginScale = 1.2f
+/** Pah genişliği / yarıçap. */
+private const val StoneBevel = 0.03f
+
+private const val OriginScale = 1.18f
 
 // ---------------------------------------------------------------------------
 // Zaman çizelgesi (ms)
@@ -243,14 +238,12 @@ private class Stone(val node: OriginNode, val label: TextLayoutResult) {
     val rx = node.radius
     val ry = node.radius * ViewSquash
 
-    val baseHeight = node.radius * 0.095f
-    val capHeight = node.radius * 0.07f
-    val capRadius = node.radius * CapRatio
+    val thickness = node.radius * StoneThickness
 
-    /** Yazının oturduğu, tamamen yükselmiş üst yüzeyin merkezi. */
-    val labelCenter = Offset(node.center.x, node.center.y - baseHeight - capHeight)
+    /** Yazının oyulduğu, tamamen yükselmiş üst yüzeyin merkezi. */
+    val labelCenter = Offset(node.center.x, node.center.y - thickness)
 
-    fun silhouette(rise: Float) = Silhouette(node.center, rx, ry, baseHeight * rise)
+    fun silhouette(rise: Float) = Silhouette(node.center, rx, ry, thickness * rise)
 }
 
 /** ORIGIN'den bir dış platforma giden bağlantı ve ondan türeyen tüm zamanlar. */
@@ -327,7 +320,7 @@ private fun buildScene(
 
     // Dört dış platform aynı boyutta. Yarıçap ekrana ve komşulara göre sınırlanır;
     // yazı boyutu ise bu yarıçaptan, en uzun kelimeye (MATEMATİK) göre türetilir.
-    val outerRadius = minOf(width / 2f - dx - width * 0.05f, dx * 0.64f, dy * 0.42f)
+    val outerRadius = minOf(width / 2f - dx - width * 0.05f, dx * 0.64f, dy * 0.46f)
     val originRadius = outerRadius * OriginScale
 
     fun style(px: Float) = TextStyle(
@@ -341,10 +334,10 @@ private fun buildScene(
     val refPx = 100f
     fun widthPerPx(text: String) = measurer.measure(text = text, style = style(refPx)).size.width / refPx
 
-    val outerFont = outerRadius * CapRatio * 2f * OuterLabelFill / widthPerPx("MATEMATİK")
+    val outerFont = outerRadius * 2f * OuterLabelFill / widthPerPx("MATEMATİK")
     val originFont = min(
         outerFont * 1.3f,
-        originRadius * CapRatio * 2f * 0.62f / widthPerPx("ORIGIN"),
+        originRadius * 2f * 0.6f / widthPerPx("ORIGIN"),
     )
 
     fun stone(name: String, center: Offset, radius: Float, fontPx: Float) = Stone(
@@ -400,19 +393,19 @@ private fun DrawScope.drawContactShadow(stone: Stone, rise: Float) {
 
     // geniş ve çok hafif
     softDisc(
-        center = c + Offset(r * 0.035f, r * 0.05f),
-        radius = r * 1.16f,
+        center = c + Offset(r * 0.02f, r * 0.035f),
+        radius = r * 1.14f,
         color = ShadowTone,
-        alpha = 0.10f * rise,
-        solidUntil = 0.80f,
+        alpha = 0.09f * rise,
+        solidUntil = 0.84f,
     )
-    // dar ve daha koyu: taşın dibindeki temas gölgesi
+    // dar: taşın dibindeki temas gölgesi
     softDisc(
-        center = c + Offset(r * 0.015f, r * 0.022f),
-        radius = r * 1.045f,
+        center = c + Offset(r * 0.01f, r * 0.016f),
+        radius = r * 1.04f,
         color = ShadowTone,
-        alpha = 0.22f * rise,
-        solidUntil = 0.90f,
+        alpha = 0.2f * rise,
+        solidUntil = 0.92f,
     )
 }
 
@@ -536,37 +529,13 @@ private fun DrawScope.drawTier(
 private fun DrawScope.drawStoneBody(stone: Stone, rise: Float) {
     if (rise <= 0f) return
 
-    val alpha = min(1f, rise * 6f)
-    val base = stone.node.center
-    val baseHeight = stone.baseHeight * rise
-    val capHeight = stone.capHeight * rise
-
     drawTier(
-        base = base,
+        base = stone.node.center,
         rx = stone.rx,
         ry = stone.ry,
-        height = baseHeight,
-        bevel = stone.rx * 0.028f,
-        alpha = alpha,
-    )
-
-    // Üst kademenin alt kademe üzerindeki temas gölgesi.
-    val capBase = Offset(base.x, base.y - baseHeight)
-    softDisc(
-        center = capBase + Offset(stone.rx * 0.012f, stone.rx * 0.02f),
-        radius = stone.capRadius * 1.07f,
-        color = ShadowTone,
-        alpha = 0.16f * rise,
-        solidUntil = 0.88f,
-    )
-
-    drawTier(
-        base = capBase,
-        rx = stone.capRadius,
-        ry = stone.capRadius * ViewSquash,
-        height = capHeight,
-        bevel = stone.capRadius * 0.03f,
-        alpha = alpha,
+        height = stone.thickness * rise,
+        bevel = stone.rx * StoneBevel,
+        alpha = min(1f, rise * 6f),
     )
 }
 
@@ -607,13 +576,9 @@ private fun DrawScope.drawContour(piece: Piece, ms: Float) {
 }
 
 /**
- * Taşa oyulmuş yazı (letterpress / engraved).
- *
- * Oyuğun sol-üst duvarı gölgede, sağ-alt duvarı ışık alır. Bunu üç geçişle veriyoruz:
- *   1) sağ-altta ince beyaz ışık dudağı
- *   2) koyu kobalt gövde (oyuğun gölgeli iç duvarı)
- *   3) ana kobalt, sol-üstten çok az kaydırılmış: koyu kenar sadece sol-üstte kalır
- * Glow, aura ve blur yok.
+ * Taşa oyulmuş yazı. Tek gövde + yarım pikselik iki ince kenar:
+ * sol-üstte oyuğun gölgeli iç duvarı, sağ-altta taş tonunda ışık dudağı.
+ * Glow, blur ve belirgin kopya yok.
  */
 private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
     val alpha = piece.labelAlpha(ms)
@@ -625,8 +590,8 @@ private fun DrawScope.drawLabel(piece: Piece, ms: Float) {
         x = stone.labelCenter.x - size.width / 2f,
         y = stone.labelCenter.y - size.height / 2f,
     )
-    val lip = Offset(0.7.dp.toPx(), 0.9.dp.toPx())
-    val wall = Offset(0.35.dp.toPx(), 0.45.dp.toPx())
+    val lip = Offset(0.45.dp.toPx(), 0.6.dp.toPx())
+    val wall = Offset(0.3.dp.toPx(), 0.38.dp.toPx())
 
     drawText(
         textLayoutResult = stone.label,
